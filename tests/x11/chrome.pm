@@ -38,6 +38,7 @@ sub run {
     select_console('x11');
     mouse_hide;
     x11_start_program('xterm');
+    x11_start_program('xterm');
     install_google_repo_key;
     zypper_call "in $chrome_url";
     save_screenshot;
