@@ -34,7 +34,7 @@ sub run {
     assert_script_run("sed -i -e 's/^SELINUX=/#SELINUX=/' /etc/selinux/config");
     assert_script_run("echo 'SELINUX=enforcing' >> /etc/selinux/config");
     assert_script_run('grep -i avc /var/log/audit/audit.log');
-    assert_script_run('rm /var/log/audit/audit.log');
+    # assert_script_run('rm /var/log/audit/audit.log');
 
     power_action("reboot", textmode => 1);
     reconnect_mgmt_console if is_pvm;
