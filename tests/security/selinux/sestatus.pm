@@ -26,6 +26,7 @@ sub run {
 
     # Check SELinux status: 'selinuxenabled' exits with status 0 if SELinux is enabled and 1 if it is not enabled
     assert_script_run('selinuxenabled');
+    assert_script_run('grep -i avc /var/log/audit/audit.log');
 }
 
 sub test_flags {
