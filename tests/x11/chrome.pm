@@ -52,6 +52,7 @@ sub run {
     enter_cmd 'about:';
     assert_screen 'google-chrome-about';
     send_key 'alt-f4';
+    x11_start_program('google-chrome --password-store=basic --incognito', target_match => 'chrome-default-browser-query');
 }
 
 1;
