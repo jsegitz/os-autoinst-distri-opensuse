@@ -5,7 +5,8 @@
 
 # Summary: Slurm master node
 #    This test is setting up slurm master node and runs tests depending
-#    on the slurm cluster configuration
+#    on the slurm cluster configuration.
+#    SLURM_VERSION enables installation of the particular versioned Slurm.
 # Maintainer: Kernel QE <kernel-qa@suse.de>
 
 use Mojo::Base qw(hpcbase hpc::configs), -signatures;
@@ -13,10 +14,13 @@ use testapi;
 use serial_terminal qw(select_serial_terminal select_user_serial_terminal);
 use lockapi;
 use utils;
+use hpc::utils 'get_slurm_version';
 use version_utils 'is_sle';
 use Utils::Logging 'export_logs_basic';
 
 our @all_tests_results;
+
+our $slurm_pkg = get_slurm_version(get_var('SLURM_VERSION', ''));
 
 sub run_tests ($slurm_conf) {
     my $xmlfile = 'testresults.xml';
@@ -35,8 +39,8 @@ sub run_tests ($slurm_conf) {
         push(@all_tests_results, run_ha_tests());
     }
 
-    pars_results('HPC slurm tests', $xmlfile, @all_tests_results);
-    parse_extra_log('XUnit', $xmlfile);
+    parse_test_results('HPC slurm tests', $xmlfile, @all_tests_results);
+    parse_extra_log('XUnit', "/tmp/$xmlfile");
 }
 
 ########################################
@@ -189,8 +193,8 @@ sub t08_basic() {
     my $name = 'pdsh-slurm';
     my $description = 'Basic check of pdsh-slurm over ssh';
     my $result = 0;
-
-    zypper_call('in pdsh pdsh-slurm');
+    # $slurm_pkg-munge is installed explicitly since slurm_23_02
+    zypper_call("in pdsh pdsh-$slurm_pkg");
 
     my $sinfo_nodeaddr = script_output('sinfo -a --Format=nodeaddr -h');
     my $pdsh_nodes = script_output('pdsh -R ssh -P normal /usr/bin/hostname');
@@ -275,25 +279,19 @@ sub t01_accounting() {
     wait_serial("Password:"); type_string("$testapi::password", lf => 1);
 
     $testapi::username = $users{user_2};
-    script_run("srun --account=UNI_X_IT -N 2 hostname");
+    script_run("srun --account=UNI_X_IT -N 2 -x master-node01,slave-node02 hostname");
     $testapi::username = $users{user_3};
     type_string("su - $users{user_3}", lf => 1);
     wait_serial("Password:"); type_string("$testapi::password", lf => 1);
 
-    script_run("srun --account=UNI_Y_Biology -N 3 date");
+    script_run("srun --account=UNI_Y_Biology -N 3 -x master-node01,slave-node02 date");
     $testapi::username = $users{user_4};
     $prompt = $testapi::username . '@' . get_required_var('HOSTNAME') . ':~> ';
     type_string("su - $users{user_4}", lf => 1);
     wait_serial("Password:"); type_string("$testapi::password", lf => 1);
-    script_run("srun --account=UNI_Y_Physics -N 3 hostname");
+    script_run("srun --account=UNI_Y_Physics -N 3 -x master-node01,slave-node02 hostname");
 
     select_serial_terminal;
-    if (script_run("srun --uid=$users{user_2} --account=UNI_X_Math -w slave-node00,slave-node01 date") != 0) {
-        record_soft_failure 'bsc#1210374 - Cant run srun with with uid switch';
-        my $last_entry = script_output "squeue | tail -n1 | awk '{print \$1}'";
-        record_info("squeue", script_output "squeue");
-        assert_script_run("scancel $last_entry");
-    }
     # this is required; see: bugzilla#1150565?
     systemctl('restart slurmctld');
     systemctl('is-active slurmctld');
@@ -433,7 +431,9 @@ sub run ($self) {
     # provision HPC cluster, so the proper rpms are installed,
     # munge key is distributed to all nodes, so is slurm.conf
     # and proper services are enabled and started
-    zypper_call('in slurm slurm-munge slurm-torque');
+    # $slurm_pkg-munge is installed explicitly since slurm_23_02
+    zypper_call("in $slurm_pkg $slurm_pkg-munge $slurm_pkg-torque");
+    record_info script_output("rpm -q --queryformat='%{VERSION}' $slurm_pkg"), 'slurm version';
 
     if ($slurm_conf =~ /ha/) {
         $self->mount_nfs();

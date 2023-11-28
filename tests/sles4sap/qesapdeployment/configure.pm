@@ -7,6 +7,7 @@
 use strict;
 use warnings;
 use Mojo::Base 'publiccloud::basetest';
+use publiccloud::azure_client;
 use testapi;
 use serial_terminal 'select_serial_terminal';
 use qesapdeployment;
@@ -18,15 +19,25 @@ sub run {
     # Init al the PC gears (ssh keys)
     my $provider = $self->provider_factory();
 
+    # Needed to create the SAS URI token
+    if (!check_var('PUBLIC_CLOUD_PROVIDER', 'AZURE')) {
+        my $azure_client = publiccloud::azure_client->new();
+        $azure_client->init();
+    }
+
     my %variables;
     $variables{REGION} = $provider->provider_client->region;
     $variables{DEPLOYMENTNAME} = qesap_calculate_deployment_name('qesapval');
     if (get_var('QESAPDEPLOY_CLUSTER_OS_VER')) {
         $variables{OS_VER} = get_var('QESAPDEPLOY_CLUSTER_OS_VER');
     }
-    else {
+    elsif (check_var('PUBLIC_CLOUD_PROVIDER', 'AZURE')) {
         $variables{STORAGE_ACCOUNT_NAME} = get_required_var('STORAGE_ACCOUNT_NAME');
         $variables{OS_URI} = $provider->get_blob_uri(get_required_var('PUBLIC_CLOUD_IMAGE_LOCATION'));
+    }
+    else
+    {
+        $variables{OS_VER} = $provider->get_image_id();
     }
     $variables{OS_OWNER} = get_var('QESAPDEPLOY_CLUSTER_OS_OWNER', 'amazon') if check_var('PUBLIC_CLOUD_PROVIDER', 'EC2');
 
@@ -42,19 +53,27 @@ sub run {
 
     $variables{HANA_ACCOUNT} = get_required_var('QESAPDEPLOY_HANA_ACCOUNT');
     $variables{HANA_CONTAINER} = get_required_var('QESAPDEPLOY_HANA_CONTAINER');
-    if (get_var("QESAPDEPLOY_HANA_TOKEN")) {
-        $variables{HANA_TOKEN} = get_required_var('QESAPDEPLOY_HANA_TOKEN');
+    if (get_var('QESAPDEPLOY_HANA_KEYNAME')) {
+        $variables{HANA_TOKEN} = qesap_az_create_sas_token(storage => get_required_var('QESAPDEPLOY_HANA_ACCOUNT'),
+            container => (split("/", get_required_var('QESAPDEPLOY_HANA_CONTAINER')))[0],
+            keyname => get_required_var('QESAPDEPLOY_HANA_KEYNAME'),
+            # lifetime has to be enough to reach the point of the test that
+            # executes qe-sap-deployment Ansible playbook 'sap-hana-download-media.yaml'
+            # and eventually any Ansible retry.
+            lifetime => 120);
+        record_info('TOKEN', $variables{HANA_TOKEN});
         # escape needed by 'sed'
         # but not implemented in file_content_replace() yet poo#120690
         $variables{HANA_TOKEN} =~ s/\&/\\\&/g;
     }
-    $variables{HANA_SAR} = get_required_var("QESAPDEPLOY_SAPCAR");
-    $variables{HANA_CLIENT_SAR} = get_required_var("QESAPDEPLOY_IMDB_CLIENT");
-    $variables{HANA_SAPCAR} = get_required_var("QESAPDEPLOY_IMDB_SERVER");
-    $variables{ANSIBLE_REMOTE_PYTHON} = get_var("QESAPDEPLOY_ANSIBLE_REMOTE_PYTHON", "/usr/bin/python3");
+    $variables{HANA_SAR} = get_required_var('QESAPDEPLOY_SAPCAR');
+    $variables{HANA_CLIENT_SAR} = get_required_var('QESAPDEPLOY_IMDB_CLIENT');
+    $variables{HANA_SAPCAR} = get_required_var('QESAPDEPLOY_IMDB_SERVER');
+    $variables{ANSIBLE_REMOTE_PYTHON} = get_var('QESAPDEPLOY_ANSIBLE_REMOTE_PYTHON', '/usr/bin/python3');
+    $variables{FENCING} = get_var('QESAPDEPLOY_FENCING', '');
     if (check_var('PUBLIC_CLOUD_PROVIDER', 'GCE')) {
-        $variables{HANA_DATA_DISK_TYPE} = get_var("QESAPDEPLOY_HANA_DISK_TYPE", "pd-ssd");
-        $variables{HANA_LOG_DISK_TYPE} = get_var("QESAPDEPLOY_HANA_DISK_TYPE", "pd-ssd");
+        $variables{HANA_DATA_DISK_TYPE} = get_var('QESAPDEPLOY_HANA_DISK_TYPE', 'pd-ssd');
+        $variables{HANA_LOG_DISK_TYPE} = get_var('QESAPDEPLOY_HANA_DISK_TYPE', 'pd-ssd');
     }
 
     if (check_var('PUBLIC_CLOUD_PROVIDER', 'AZURE')) {

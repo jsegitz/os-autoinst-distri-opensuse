@@ -12,6 +12,7 @@ use warnings;
 use base 'Exporter';
 use Exporter;
 use main_common;
+use main_ltp_loader 'load_kernel_tests';
 use main_containers qw(load_container_tests is_container_test);
 use testapi qw(check_var get_required_var get_var set_var);
 use version_utils;
@@ -100,7 +101,8 @@ sub load_installation_tests {
     } else {
         loadtest 'installation/installation_overview';
     }
-    loadtest 'installation/disable_grub_timeout';
+    loadtest 'installation/disable_grub_timeout' if is_bootloader_grub2;
+    loadtest 'installation/configure_sdboot' if is_bootloader_sdboot;
     loadtest 'installation/enable_selinux' if get_var('ENABLE_SELINUX');
     loadtest 'installation/start_install';
     loadtest 'installation/await_install';
@@ -170,18 +172,22 @@ sub load_common_tests {
     loadtest 'console/regproxy' if is_regproxy_required;
     loadtest 'microos/networking';
     loadtest 'microos/libzypp_config';
-    loadtest 'microos/image_checks' if is_image;
+    loadtest 'microos/image_checks' if (is_image || is_selfinstall);
     loadtest 'microos/one_line_checks';
     loadtest 'microos/services_enabled';
     # MicroOS -old images use wicked, but cockpit-wicked is no longer supported in TW
-    loadtest 'microos/cockpit_service' unless is_staging || (is_microos('Tumbleweed') && get_var('HDD_1') =~ /-old/);
+    loadtest 'microos/cockpit_service' unless (is_microos('Tumbleweed') && is_staging) || (is_microos('Tumbleweed') && get_var('HDD_1', '') =~ /-old/) || !get_var('SCC_REGISTER') || is_alp;
     # Staging has no access to repos and the MicroOS-DVD does not contain ansible
     # Ansible test needs Packagehub in SLE and it can't be enabled in SLEM
     loadtest 'console/ansible' unless (is_staging || is_sle_micro || is_leap_micro || is_alp);
     loadtest 'console/kubeadm' if (check_var('SYSTEM_ROLE', 'kubeadm'));
     # SLE Micro is not 2038-proof, so it doesn't apply here, but it does for ALP.
     # On s390x zvm setups we need more time to wait for system to boot up.
-    loadtest 'console/year_2038_detection' unless (is_s390x || is_sle_micro || is_leap_micro);
+    # Skip this test with sd-boot. The reason is not what you'd think though:
+    # With sd-boot, host_config does not perform a reboot and a snapshot is made while the serial terminal
+    # is logged in. year_2038_detection does a forced rollback to this snapshot and triggers poo#109929,
+    # breaking most later modules.
+    loadtest 'console/year_2038_detection' unless (is_s390x || is_sle_micro || is_leap_micro || is_bootloader_sdboot);
 }
 
 
@@ -192,7 +198,7 @@ sub load_transactional_tests {
     loadtest 'microos/patterns' if is_sle_micro;
     loadtest 'transactional/transactional_update';
     loadtest 'transactional/rebootmgr';
-    loadtest 'transactional/health_check';
+    loadtest 'transactional/health_check' if is_bootloader_grub2;    # health-checker needs GRUB2 (poo#129748)
 }
 
 
@@ -326,7 +332,7 @@ sub load_tests {
 
     if (get_var('BOOT_HDD_IMAGE')) {
         load_boot_from_disk_tests;
-    } elsif (get_var('SELFINSTALL')) {
+    } elsif (is_selfinstall) {
         load_selfinstall_boot_tests;
     } elsif (get_var('AUTOYAST')) {
         load_autoyast_installation_tests;

@@ -20,10 +20,6 @@ local findBiggestDisk(disks) =
     language: 'en_US',
   },
   storage: {
-    devices: [
-      {
-        name: findBiggestDisk(agama.disks),
-      },
-    ],
+    bootDevice: findBiggestDisk(agama.disks),
   },
 }

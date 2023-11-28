@@ -1,6 +1,6 @@
 # SUSE's openQA tests
 #
-# Copyright 2018-2019 SUSE LLC
+# Copyright 2018-2023 SUSE LLC
 # SPDX-License-Identifier: FSFAP
 
 # Package: python3-img-proof
@@ -12,7 +12,7 @@ use Mojo::Base 'publiccloud::basetest';
 use testapi;
 use Mojo::File 'path';
 use Mojo::JSON;
-use publiccloud::utils 'is_ondemand';
+use publiccloud::utils qw(is_ondemand);
 use publiccloud::ssh_interactive 'select_host_console';
 
 sub run {
@@ -36,6 +36,16 @@ sub run {
     if ($tests eq "default") {
         record_info("Deprecated setting", "PUBLIC_CLOUD_IMG_PROOF_TESTS should not use 'default' anymore. Please use 'test_sles' instead.", result => 'softfail');
         $tests = "test_sles";
+    }
+
+    if (get_var('IMG_PROOF_GIT_REPO')) {
+        my $repo = get_required_var('IMG_PROOF_GIT_REPO');
+        my $branch = get_required_var('IMG_PROOF_GIT_BRANCH');
+        assert_script_run "zypper rm -y python3-img-proof python3-img-proof-tests";
+        assert_script_run "git clone --depth 1 -q --branch $branch $repo";
+        assert_script_run "cd img-proof";
+        assert_script_run "python3 setup.py install";
+        assert_script_run "cp -r usr/* /usr";
     }
 
     my $img_proof = $provider->img_proof(

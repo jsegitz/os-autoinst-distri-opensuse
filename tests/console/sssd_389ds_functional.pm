@@ -61,12 +61,14 @@ sub run {
 "$docker run -itd --shm-size=256m --name ds389_container --hostname ldapserver --privileged -v /sys/fs/cgroup:/sys/fs/cgroup:ro --restart=always ds389_image"
     ) if ($docker eq "docker");
     assert_script_run("$docker run -itd --shm-size=256m --name ds389_container --hostname ldapserver ds389_image") if ($docker eq "podman");
+    assert_script_run("$docker exec ds389_container chown dirsrv:dirsrv /var/lib/dirsrv");
     assert_script_run("$docker exec ds389_container sed -n '/ldapserver/p' /etc/hosts >> /etc/hosts");
     assert_script_run("$docker exec ds389_container dscreate from-file /tmp/instance_389.inf");
     assert_script_run('ldapadd -x -H ldap://ldapserver -D "cn=Directory Manager" -w opensuse -f user_389.ldif');
     assert_script_run('ldapadd -x -H ldap://ldapserver -D "cn=Directory Manager" -w opensuse -f access.ldif');
 
     # Configure sssd on the host side
+    assert_script_run('mkdir -p /etc/sssd/');
     assert_script_run("$docker cp ds389_container:/etc/dirsrv/slapd-frist389/ca.crt /etc/sssd/ldapserver.crt");
     assert_script_run("curl " . data_url("sssd/398-ds/sssd.conf") . " -o /etc/sssd/sssd.conf");
     assert_script_run("curl " . data_url("sssd/398-ds/nsswitch.conf") . " -o /etc/nsswitch.conf");

@@ -24,6 +24,7 @@ use Utils::Backends;
 use registration qw(add_suseconnect_product);
 use version_utils qw(is_sle);
 use utils qw(zypper_call);
+use Digest::MD5 qw(md5_hex);
 use Utils::Systemd qw(systemctl);
 use Utils::Logging 'save_and_upload_log';
 
@@ -41,6 +42,7 @@ our @EXPORT = qw(
   reset_user_change
   get_total_mem
   prepare_profile
+  copy_media
   mount_media
   add_hostname_to_hosts
   test_pids_max
@@ -364,6 +366,83 @@ sub prepare_profile {
     }
 }
 
+=head2 _do_mount
+
+ _do_mount( $proto, $path, $target);
+
+Performs a call to the mount command (used by both C<mount_media> and C<copy_media>) with
+appropiate options depending on the protocol. Function internal to the class.
+
+=cut
+
+sub _do_mount {
+    my ($proto, $path, $mnt_path) = @_;
+
+    # Set some NFS options in case we are using NFS
+    my $nfs_client_id = md5_hex(get_required_var('JOBTOKEN'));
+    my $options = 'ro';
+    if ($proto eq 'nfs') {
+        my $nfs_timeo = get_var('NFS_TIMEO');
+        $options = $nfs_timeo ? "timeo=$nfs_timeo,rsize=16384,wsize=16384,ro" : 'rsize=16384,wsize=16384,ro';
+        # Attempt to force a unique NFSv4 client id
+        assert_script_run "modprobe nfs nfs4_unique_id=$nfs_client_id";
+        # Check nfs4_unique_id parameter file exists
+        assert_script_run 'until ls /sys/module/nfs/parameters/nfs4_unique_id; do sleep 1; done';
+    }
+    assert_script_run "mount -t $proto -o $options $path $mnt_path", 90;
+    # Check NFS client ID
+    assert_script_run 'cat /sys/module/nfs/parameters/nfs4_unique_id' if ($proto eq 'nfs');
+}
+
+=head2 copy_media
+
+ $self->copy_media( $proto, $path, $timeout, $target);
+
+Copies installation media in SUT from the share identified by B<$proto> and
+B<$path> into the target directory B<$target>. B<$timeout> specifies how long
+to wait for the copy to complete.
+
+After installation files are copied, this method will also verify the existence
+of a F<checksum.md5sum> file in the target directory and use it to check for the
+integrity of the copied files. This test can be skipped by setting to a
+true value the B<DISABLE_CHECKSUM> setting in the test.
+
+The method will croak if any of the commands sent to SUT fail.
+
+=cut
+
+sub copy_media {
+    my ($self, $proto, $path, $nettout, $target) = @_;
+    my $mnt_path = '/mnt';
+    my $media_path = "$mnt_path/" . get_required_var('ARCH');
+
+    # First create $target and copy media there
+    assert_script_run "mkdir $target";
+    _do_mount($proto, $path, $mnt_path);
+    $media_path = $mnt_path if script_run "[[ -d $media_path ]]";    # Check if specific ARCH subdir exists
+    my $rsync = 'rsync -azr --info=progress2';
+    record_info 'rsync stats (dry-run)', script_output("$rsync --dry-run --stats $media_path/ $target/", proceed_on_failure => 1);
+    assert_script_run "$rsync $media_path/ $target/", $nettout;
+
+    # Unmount the share, as we don't need it anymore
+    assert_script_run "umount $mnt_path";
+
+    # Skip checksum check if DISABLE_CHECKSUM is set, or if no
+    # checksum.md5sum file was copied to the $target directory
+    # NOTE: checksum is generated with this command: "find . -type f -exec md5sum {} \; > checksum.md5sum"
+    my $chksum_file = 'checksum.md5sum';
+    my $no_checksum_file = script_run "[[ -f $target/$chksum_file ]]";
+    return 1 if (get_var('DISABLE_CHECKSUM') || $no_checksum_file);
+
+    # Switch to $target to verify copied contents are OK
+    assert_script_run "pushd $target";
+    # We can't check the checksum file itself as well as the clustered NFS share part
+    assert_script_run "sed -i -e '/$chksum_file\$/d' -e '/\\/nfs_share/d' $chksum_file";
+    assert_script_run "md5sum -c --quiet $chksum_file", $nettout;
+    # Back to previous directory
+    assert_script_run 'popd';
+}
+
 =head2 mount_media
 
  $self->mount_media( $proto, $path, $target );
@@ -379,7 +458,7 @@ sub mount_media {
     my $media_path = "$mnt_path/" . get_required_var('ARCH');
 
     assert_script_run "mkdir $target";
-    assert_script_run "mount -t $proto -o ro $path $mnt_path";
+    _do_mount($proto, $path, $mnt_path);
     $media_path = $mnt_path if script_run "[[ -d $media_path ]]";    # Check if specific ARCH subdir exists
 
     # Create a overlay to "allow" writes to the readonly filesystem

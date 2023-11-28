@@ -58,7 +58,7 @@
         "description": "Failed unmounting \/\\S+\\.|-- Reboot --|pam_systemd.*Failed to release session",
         "products": {
             "sle-micro": [ "5.0", "5.1", "5.2", "5.3" , "5.4" , "5.5"],
-            "leap-micro": [ "5.2", "5.3", "5.4" ],
+            "leap-micro": [ "5.2", "5.3", "5.4", "5.5" ],
             "microos":  ["Tumbleweed"],
             "alp":  ["0.1", "0.1:S:A", "0.1:S:B"]
         },
@@ -106,7 +106,8 @@
             "sle-micro": [ "5.0", "5.1", "5.2", "5.3", "5.4" , "5.5" ],
             "opensuse": ["Tumbleweed", "15.2", "15.3"],
             "microos":  ["Tumbleweed"],
-            "sle": ["15-SP2", "15-SP3", "15-SP4", "15-SP5", "15-SP6"]
+            "sle": ["15-SP2", "15-SP3", "15-SP4", "15-SP5", "15-SP6"],
+            "alp":  ["1.0"]
         },
         "type": "bug"
     },
@@ -224,7 +225,7 @@
     "bsc#1197679": {
         "description": "route ipv4 0.0.0.0/0 via.*dev eth0#2 type unicast table main scope universe protocol dhcp covered by a ipv4:dhcp lease",
         "products": {
-            "sle": ["15-SP4", "15-SP5"]
+            "sle": ["15-SP4", "15-SP5", "15-SP6"]
         },
         "type": "bug"
     },
@@ -252,7 +253,7 @@
         "type": "ignore"
     },
     "apci-bridge": {
-        "description": "fail to add MMCONFIG information, can't access extended PCI configuration space under this bridge|PCI: System does not support PCI",
+        "description": "fail to add MMCONFIG information, can't access extended (PCI|.*configuration) space under this bridge|PCI: System does not support PCI",
         "products": {
             "opensuse": ["Tumbleweed", "15.2", "15.3"],
             "sle": ["15-SP2", "15-SP3", "15-SP4", "15-SP5", "15-SP6"]
@@ -295,7 +296,7 @@
             "sle-micro": [ "5.0", "5.1" ],
             "opensuse": ["Tumbleweed", "15.2", "15.3"],
             "microos":  ["Tumbleweed"],
-            "sle": ["15-SP2", "15-SP3", "15-SP4", "15-SP5"]
+            "sle": ["15-SP2", "15-SP3", "15-SP4", "15-SP5", "15-SP6"]
         },
         "type": "ignore"
     },
@@ -305,7 +306,7 @@
             "sle-micro": [ "5.0", "5.1" ],
             "opensuse": ["Tumbleweed", "15.2", "15.3"],
             "microos":  ["Tumbleweed"],
-            "sle": ["15-SP2", "15-SP3", "15-SP4", "15-SP5"]
+            "sle": ["15-SP2", "15-SP3", "15-SP4", "15-SP5", "15-SP6"]
         },
         "type": "ignore"
     },
@@ -317,10 +318,10 @@
         "type": "ignore"
     },
     "health-check-typo": {
-        "description": "health-checker/fail.sh check\" failed|Failed to start MicroOS Health Checker.Machine didn't come up correct, do a rollback|",
+        "description": "health-checker/fail.sh check\" failed|Failed to start MicroOS Health Checker|Machine didn't come up correct, do a rollback",
         "products": {
             "sle-micro": [ "5.0", "5.1", "5.2", "5.3", "5.4" , "5.5" ],
-            "leap-micro": ["5.2", "5.3", "5.4"],
+            "leap-micro": ["5.2", "5.3", "5.4", "5.5"],
             "microos":  ["Tumbleweed"],
             "alp":  ["0.1", "0.1:S:A", "0.1:S:B"]
         },
@@ -330,7 +331,7 @@
         "description": "health-checker/fail.sh check\" failed|Machine didn't come up correctly, do a rollback",
         "products": {
             "microos":  ["Tumbleweed"],
-            "alp":  ["micro-0.1", "bedrock-0.1"]
+            "alp":  ["1.0"]
         },
         "type": "ignore"
     },
@@ -355,11 +356,14 @@
         "type": "ignore"
     },
     "no-config-drive": {
-        "description": "Timed out waiting for device (/dev/disk/by-label/ignition|/dev/combustion/config)",
+        "description": "Timed out waiting for device (/dev/disk/by-label/ignition|/dev/combustion/config)|dev-combustion-config.device: Job dev-combustion-config.device/start timed out.",
         "products": {
             "leap-micro": ["5.3"],
             "sle-micro": ["5.3", "5.4" , "5.5"],
-            "microos":  ["Tumbleweed"]
+            "microos":  ["Tumbleweed"],
+            "opensuse":  ["Tumbleweed"],
+            "sle": ["15-SP6"],
+            "alp":  ["1.0"]
         },
         "type": "ignore"
     },
@@ -386,6 +390,13 @@
             "sle-micro": ["5.1", "5.2", "5.3", "5.4" , "5.5"]
         },
         "type": "ignore"
+    },
+    "bsc#1195060": {
+        "description": "Failed to start Load kdump kernel early on startup",
+        "products": {
+            "sle-micro": ["5.1", "5.2", "5.3"]
+        },
+        "type": "bug"
     },
     "bsc#1199163": {
         "description": "Directory '.*.hdmi' with parent 'vc4-hdmi.* already present",
@@ -424,6 +435,13 @@
         },
         "type": "bug"
     },
+    "bsc#1215375": {
+        "description": "Failed to lookup EFI memory descriptor for 0x000000003f.*0",
+        "products": {
+            "sle-micro": [ "5.1", "5.2" ]
+        },
+        "type": "bug"
+    },
     "bsc#1207300": {
         "description": "virtio_gpu virtio.*drm_plane_enable_fb_damage_clips\\(\\) not called",
         "products": {
@@ -449,6 +467,88 @@
         "description": "Failed to start OpenSSH Daemon.",
         "products": {
             "microos":  ["Tumbleweed"]
+        },
+        "type": "bug"
+    },
+    "boo#1215367": {
+        "description": "pam_wtmpdb\\(login:session\\): Failed to execute statement: database is locked",
+        "products": {
+            "microos":  ["Tumbleweed"],
+            "alp": ["1.0"]
+        },
+        "type": "bug"
+    },
+    "boo#1215368": {
+        "description": "systemctl: invalid option -- '\\.'",
+        "products": {
+            "microos":  ["Tumbleweed"]
+        },
+        "type": "bug"
+    },
+    "bsc#1215377": {
+        "description": "plugin /usr/sbin/sedispatch terminated unexpectedly",
+        "products": {
+            "sle-micro": ["5.4" , "5.5"],
+            "leap-micro": [ "5.5" ]
+        },
+        "type": "bug"
+    },
+    "bsc#1215378": {
+        "description": "libvirtd.*: error from service: GDBus.Error:org.freedesktop.login1.OperationInProgress: The operation inhibition has been requested for is already running",
+        "products": {
+            "sle-micro": ["5.3", "5.4" , "5.5"]
+        },
+        "type": "bug"
+    },
+    "bsc#1215405": {
+        "description": "setroubleshoot.*SELinux is preventing .*(rebootmgrd|NetworkManager|sshd).* from.* access.*|setroubleshoot.*: failed to retrieve rpm info for path.*",
+        "products": {
+            "sle-micro": ["5.4" , "5.5"],
+            "leap-micro": [ "5.5" ]
+        },
+        "type": "bug"
+    },
+    "system-clock-wrong": {
+        "description": "System clock wrong by .*",
+        "products": {
+            "microos":  ["Tumbleweed"],
+            "sle": ["12-SP5", "15", "15-SP1", "15-SP2", "15-SP3", "15-SP4", "15-SP5"],
+            "sle-micro": ["5.1", "5.2", "5.3", "5.4" , "5.5"],
+            "leap-micro": ["5.1", "5.2", "5.3", "5.4" , "5.5"]
+        },
+        "type": "ignore"
+    },
+    "boo#1212970": {
+        "description": "systemd-vconsole-setup\\[.*\\]: /usr/bin/setfont failed with exit status 71.*",
+        "products": {
+            "opensuse": ["Tumbleweed"],
+            "microos":  ["Tumbleweed"],
+            "alp": ["1.0"]
+        },
+        "type": "bug"
+    },
+    "bsc#1215380" : {
+        "description": "Failed to start Entropy Daemon based on the HAVEGE algorithm.",
+        "products": {
+            "sle-micro": ["5.3"],
+            "leap-micro": ["5.3"]
+        },
+        "type": "bug"
+    },
+    "bsc#1216196": {
+        "description": "qgroup reserved space leaked",
+        "products": {
+            "opensuse": ["Tumbleweed"],
+            "microos":  ["Tumbleweed"]
+        },
+        "type": "bug"
+    },
+    "bsc#1215383": {
+        "description": "pam_lastlog2\\(.*\\): User 'bernhard' not found \\(101\\)",
+        "products": {
+            "opensuse": ["Tumbleweed"],
+            "microos":  ["Tumbleweed"],
+            "alp":  ["1.0"]            
         },
         "type": "bug"
     }

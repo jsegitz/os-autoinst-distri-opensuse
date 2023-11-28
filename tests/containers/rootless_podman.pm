@@ -1,6 +1,6 @@
 # SUSE's openQA tests
 #
-# Copyright 2021 SUSE LLC
+# Copyright 2021-2023 SUSE LLC
 # SPDX-License-Identifier: FSFAP
 
 # Summary: Test rootless mode on podman.
@@ -13,7 +13,7 @@
 #   * container is launched with existing user id
 #   * container is launched with keep-id of the user who run the container
 # - Restore /etc/zypp/credentials.d/ credentials
-# Maintainer: qa-c team <qa-c@suse.de>
+# Maintainer: QE-C team <qa-c@suse.de>
 
 use Mojo::Base 'containers::basetest';
 use testapi;
@@ -23,10 +23,7 @@ use containers::common;
 use containers::container_images;
 use containers::utils qw(registry_url get_podman_version);
 use version_utils qw(is_sle is_leap is_jeos is_transactional package_version_cmp);
-use power_action_utils 'power_action';
-use bootloader_setup 'add_grub_cmdline_settings';
 use Utils::Architectures;
-use transactional 'process_reboot';
 use Utils::Logging 'save_and_upload_log';
 
 my $bsc1200623 = 0;    # to prevent printing the soft-failure more than once
@@ -52,34 +49,26 @@ sub run {
         my $cont_storage = '/etc/containers/storage.conf';
         if ($unresolved_config =~ m|$cont_storage|) {
             assert_script_run(sprintf('mv  %s.rpmnew %s', $cont_storage, $cont_storage));
+            assert_script_run('rm -rf /var/lib/containers/storage') if is_aarch64;
             assert_script_run('podman system reset -f');
         }
     }
 
     # Prepare for Podman 3.4.4 and CGroups v2
     if (is_sle('15-SP3+') || is_leap('15.3+')) {
-        record_info 'cgroup v2', 'Switching to cgroup v2';
         assert_script_run "usermod -a -G systemd-journal $testapi::username";
-        if (is_transactional) {
-            add_grub_cmdline_settings('systemd.unified_cgroup_hierarchy=1', update_grub => 0);
-            assert_script_run('transactional-update grub.cfg');
-            process_reboot(trigger => 1);
-        } else {
-            add_grub_cmdline_settings('systemd.unified_cgroup_hierarchy=1', update_grub => 1);
-            power_action('reboot', textmode => 1);
-            $self->wait_boot(bootloader_time => 360);
-        }
+        switch_cgroup_version($self, 2);
         select_serial_terminal;
 
-        validate_script_output 'cat /proc/cmdline', sub { /systemd\.unified_cgroup_hierarchy=1/ };
         validate_script_output 'podman info', sub { /cgroupVersion: v2/ };
         validate_script_output "id $testapi::username", sub { /systemd-journal/ };
     }
 
-    if ((is_s390x || is_ppc64le) && check_bsc1192051()) {
-        record_soft_failure("bsc#1192051 - Permission denied for faccessat2");
-        return;
-    }
+    # Check for bsc#1192051
+    # Test needs to pass, if seccomp filtering is off
+    assert_script_run('podman run --security-opt=seccomp=unconfined --rm -it registry.opensuse.org/opensuse/tumbleweed:latest bash -c "test -x /bin/sh"');
+    # And this one is the actual check for bsc#1192051, with seccomp filtering on
+    assert_script_run('podman run --rm -it registry.opensuse.org/opensuse/tumbleweed:latest bash -c "test -x /bin/sh"', fail_message => "bsc#1192051 - Permission denied for faccessat2");
 
     my $image = 'registry.opensuse.org/opensuse/tumbleweed:latest';
 
@@ -190,14 +179,6 @@ sub verify_userid_on_container {
     my $cmd = '(id | grep uid=0) && zypper -n -q in sudo shadow && useradd geeko -u 1000 && (sudo -u geeko id | grep geeko)';
     script_retry("podman run -ti --rm '$image' bash -c '$cmd'", timeout => 300, retry => 3, delay => 60);
 
-}
-
-# Check if bsc#1192051 is present. bsc#1192051 is basically a permission denied error in faccessat2
-sub check_bsc1192051() {
-    # Test needs to pass, if seccomp filtering is off
-    assert_script_run('podman run --security-opt=seccomp=unconfined --rm -it registry.opensuse.org/opensuse/tumbleweed:latest bash -c "test -x /bin/sh"');
-    # And this one is the actual check for bsc#1192051, with seccomp filtering on
-    return script_run('podman run --rm -it registry.opensuse.org/opensuse/tumbleweed:latest bash -c "test -x /bin/sh"') != 0;
 }
 
 sub check_bsc1200623() {

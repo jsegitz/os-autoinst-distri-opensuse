@@ -28,7 +28,7 @@ our @EXPORT = qw(
 );
 
 sub is_container_test {
-    return get_var('CONTAINER_RUNTIME', 0);
+    return get_var('CONTAINER_RUNTIMES', 0);
 }
 
 sub is_container_image_test {
@@ -85,6 +85,11 @@ sub load_image_tests_docker {
     }
 }
 
+sub load_container_engine_privileged_mode {
+    my ($run_args) = @_;
+    loadtest('containers/privileged_mode', run_args => $run_args, name => $run_args->{runtime} . "_privileged_mode");
+}
+
 sub load_host_tests_podman {
     my ($run_args) = @_;
     # podman package is only available as of 15-SP1
@@ -93,6 +98,8 @@ sub load_host_tests_podman {
         # In Public Cloud we don't have internal resources
         load_image_test($run_args) unless is_public_cloud || is_alp;
         load_3rd_party_image_test($run_args);
+        load_container_engine_privileged_mode($run_args);
+        loadtest 'containers/podman_bci_systemd';
         loadtest 'containers/podman_pods';
         # Default for ALP is Netavark
         loadtest('containers/podman_network_cni') unless (is_alp);
@@ -103,8 +110,11 @@ sub load_host_tests_podman {
         # Buildah is not available in SLE Micro, MicroOS and staging projects
         loadtest 'containers/buildah' unless (is_sle_micro || is_microos || is_leap_micro || is_alp || is_staging);
         # https://github.com/containers/podman/issues/5732#issuecomment-610222293
-        # exclude rootless poman on public cloud because of cgroups2 special settings
-        loadtest 'containers/rootless_podman' unless (is_sle('<15-sp2') || is_openstack || is_public_cloud);
+        # exclude rootless podman on public cloud because of cgroups2 special settings
+        unless (is_sle('<15-sp2') || is_openstack || is_public_cloud) {
+            loadtest 'containers/rootless_podman';
+            loadtest 'containers/podman_remote' if is_sle '>15-sp2';
+        }
         load_volume_tests($run_args);
     }
 }
@@ -115,6 +125,7 @@ sub load_host_tests_docker {
     # In Public Cloud we don't have internal resources
     load_image_test($run_args) unless is_public_cloud || is_alp;
     load_3rd_party_image_test($run_args);
+    load_container_engine_privileged_mode($run_args);
     # Firewall is not installed in Public Cloud, JeOS OpenStack and MicroOS but it is in SLE Micro
     loadtest 'containers/docker_firewall' unless (is_public_cloud || is_openstack || is_microos);
     unless (is_sle("<=15") && is_aarch64) {
@@ -135,11 +146,10 @@ sub load_host_tests_docker {
         loadtest 'containers/validate_btrfs';
     }
     load_volume_tests($run_args);
-    loadtest 'containers/buildx' if (is_tumbleweed || is_microos);
-}
-
-sub load_host_tests_containerd_rmt {
-    loadtest 'containers/containerd_rmt';
+    if (is_tumbleweed || is_microos) {
+        loadtest 'containers/buildx';
+        loadtest 'containers/rootless_docker';
+    }
 }
 
 sub load_host_tests_containerd_crictl {
@@ -194,7 +204,7 @@ sub update_host_and_publish_hdd {
         # we only need to shutdown the VM before publishing the HDD
         loadtest 'boot/boot_to_desktop';
         loadtest 'containers/update_host';
-        loadtest 'containers/openshift_setup' if check_var('CONTAINER_RUNTIME', 'openshift');
+        loadtest 'containers/openshift_setup' if check_var('CONTAINER_RUNTIMES', 'openshift');
     }
     loadtest 'shutdown/cleanup_before_shutdown' if is_s390x;
     loadtest 'shutdown/shutdown';
@@ -202,7 +212,7 @@ sub update_host_and_publish_hdd {
 }
 
 sub load_container_tests {
-    my $runtime = get_required_var('CONTAINER_RUNTIME');
+    my $runtime = get_required_var('CONTAINER_RUNTIMES');
 
     if (get_var('CONTAINER_UPDATE_HOST')) {
         update_host_and_publish_hdd();
@@ -219,7 +229,11 @@ sub load_container_tests {
     if (is_container_image_test() && !(is_jeos || is_sle_micro || is_microos || is_leap_micro) && $runtime !~ /k8s|openshift/) {
         # Container Image tests common
         loadtest 'containers/host_configuration';
-        loadtest 'containers/bci_prepare' if (get_var('BCI_TESTS') && !get_var('BCI_SKIP'));
+        if (get_var('BCI_TESTS') && !get_var('BCI_SKIP')) {
+            loadtest 'containers/bci_prepare';
+            # bci_version_check required jq from bci_prepare.
+            loadtest 'containers/bci_version_check' if (get_var('CONTAINER_IMAGE_TO_TEST') && get_var('CONTAINER_IMAGE_BUILD'));
+        }
     }
 
     if (get_var('CONTAINER_SLEM_RANCHER')) {
@@ -227,8 +241,18 @@ sub load_container_tests {
         return;
     }
 
+    if (get_var('HELM_CONFIG')) {
+        loadtest 'containers/helm_rmt';
+        return;
+    }
+
     if ($runtime eq 'k3s') {
         loadtest 'containers/run_container_in_k3s';
+        return;
+    }
+
+    if (get_var('CONTAINER_SUMA')) {
+        loadtest 'containers/suma_containers';
         return;
     }
 
@@ -259,7 +283,6 @@ sub load_container_tests {
             load_host_tests_docker($run_args) if (/docker/i);
             load_host_tests_containerd_crictl() if (/containerd_crictl/i);
             load_host_tests_containerd_nerdctl() if (/containerd_nerdctl/i);
-            load_host_tests_containerd_rmt() if (/containerd_rmt/i);
             loadtest('containers/kubectl') if (/kubectl/i);
             load_host_tests_helm($run_args) if (/helm/i);
             loadtest 'containers/apptainer' if (/apptainer/i);

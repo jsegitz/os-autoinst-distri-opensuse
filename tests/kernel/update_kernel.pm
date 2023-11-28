@@ -14,14 +14,15 @@ use base 'opensusebasetest';
 use testapi;
 use serial_terminal 'select_serial_terminal';
 use utils;
-use version_utils qw(is_sle package_version_cmp);
+use version_utils qw(is_sle is_transactional package_version_cmp);
 use qam;
-use kernel 'remove_kernel_packages';
+use kernel;
 use klp;
 use power_action_utils 'power_action';
 use repo_tools 'add_qa_head_repo';
 use Utils::Backends;
 use LTP::utils;
+use transactional;
 
 sub check_kernel_package {
     my $kernel_name = shift;
@@ -85,7 +86,11 @@ sub update_kernel {
     fully_patch_system;
 
     if (check_var('SLE_PRODUCT', 'slert')) {
-        zypper_call('in kernel-devel-rt');
+        if (is_transactional) {
+            record_info("There is no kernel-devel-rt available on transactional system.");
+        } else {
+            zypper_call('in kernel-devel-rt');
+        }
     }
     elsif (is_sle('12+')) {
         zypper_call('in kernel-devel');
@@ -106,7 +111,14 @@ sub update_kernel {
     }
     else {
         # Use single patch or patch list
-        zypper_call("in -l -t patch $patches", exitcode => [0, 102, 103], log => 'zypper.log', timeout => 1400);
+        if (is_transactional) {
+            # Proceed with transactional-update patch
+            trup_call("patch");
+            # Reboot system after patch, to make sure that further checks are done on updated system
+            reboot_on_changes;
+        } else {
+            zypper_call("in -l -t patch $patches", exitcode => [0, 102, 103], log => 'zypper.log', timeout => 1400);
+        }
     }
 }
 
@@ -372,7 +384,8 @@ sub install_kotd {
     fully_patch_system;
     remove_kernel_packages;
     zypper_ar($repo, name => 'KOTD', priority => 90, no_gpg_check => 1);
-    zypper_call("in -l kernel-default kernel-devel");
+    my $kernel_flavor = get_kernel_flavor;
+    zypper_call("in -l ${kernel_flavor} kernel-devel");
 }
 
 sub boot_to_console {
@@ -388,7 +401,7 @@ sub boot_to_console {
 sub run {
     my $self = shift;
 
-    if (is_ipmi && get_var('LTP_BAREMETAL')) {
+    if ((is_ipmi && get_var('LTP_BAREMETAL')) || is_transactional) {
         # System is already booted after installation, just switch terminal
         select_serial_terminal;
     } else {
@@ -399,7 +412,7 @@ sub run {
 
     my $repo = get_var('KOTD_REPO');
     my $incident_id = undef;
-    my $kernel_package = 'kernel-default';
+    my $kernel_package = get_kernel_flavor;
 
     unless ($repo) {
         $repo = get_required_var('INCIDENT_REPO');
@@ -454,7 +467,9 @@ sub run {
 
     check_kernel_package($kernel_package);
 
-    if (!get_var('KGRAFT')) {
+    if (is_transactional) {
+        reboot_on_changes;
+    } elsif (!get_var('KGRAFT')) {
         power_action('reboot', textmode => 1);
         $self->wait_boot if get_var('LTP_BAREMETAL');
     }

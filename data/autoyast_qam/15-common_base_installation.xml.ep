@@ -2,7 +2,12 @@
 <!DOCTYPE profile>
 <profile xmlns="http://www.suse.com/1.0/yast2ns" xmlns:config="http://www.suse.com/1.0/configns">
   <suse_register>
+    % unless ($check_var->('FLAVOR', 'Server-DVD-Updates-TERADATA') or $check_var->('FLAVOR', 'Server-DVD-Incidents-TERADATA')) {
     <do_registration config:type="boolean">true</do_registration>
+    % }
+    % if ($check_var->('FLAVOR', 'Server-DVD-Updates-TERADATA') or $check_var->('FLAVOR', 'Server-DVD-Incidents-TERADATA')) {
+    <do_registration config:type="boolean">false</do_registration>
+    % }
     <email><%= $get_var->('SCC_EMAIL') %></email>
     <reg_code><%= $get_var->('SCC_REGCODE') %></reg_code>
     <install_updates config:type="boolean">true</install_updates>
@@ -194,7 +199,12 @@
         <route>
           <destination>default</destination>
           <device>eth0</device>
+          % if ( $get_var->('WORKER_HOSTNAME') =~ /prg2/ ) {
+          <gateway>10.145.10.254</gateway>
+          % }
+          % if ( $get_var->('WORKER_HOSTNAME') =~ /nue2/ ) {
           <gateway>10.161.159.254</gateway>
+          % }
           <netmask>-</netmask>
         </route>
       </routes>
@@ -315,17 +325,19 @@
     % if ($get_var->('SCC_ADDONS') =~ m/\brt\b/) {
     <kernel>kernel-rt</kernel>
     % }
+    % if ($check_var->('VERSION', '15-SP1') or $check_var->('VERSION', '15-SP2') or $check_var->('VERSION', '15-SP3') or $check_var->('VERSION', '15-SP4')) {
     <packages config:type="list">
-      <!-- Workaround for bsc#1202234: [addon]-release packages are missing after autoyast installation. -->
-      % foreach (values %$addons) {
-      <package><%= lc($_->{name}) %>-release</package>
+      % if ($check_var->('VERSION', '15-SP1') or $check_var->('VERSION', '15-SP2')) {
+        <!-- Workaround for bsc#1202234: [addon]-release packages are missing after autoyast installation. -->
+        % foreach (values %$addons) {
+        <package><%= lc($_->{name}) %>-release</package>
+        % }
+        <!-- end of workaround -->
       % }
-      <!-- end of workaround -->
-    % if ($check_var->('VERSION', '15-SP3') or $check_var->('VERSION', '15-SP4')) {
       <package>openssh</package>
       <package>firewalld</package>
-    % }
     </packages>
+    % }
     <patterns config:type="list">
       % for my $pattern (@$patterns) {
       <pattern><%= $pattern %></pattern>

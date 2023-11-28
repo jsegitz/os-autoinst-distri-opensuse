@@ -2,12 +2,11 @@ name: fips_crypt_core
 description:    >
     This is for the crypt_core fips tests.
 schedule:
-    - '{{boot}}'
-    - boot/boot_to_desktop
-    - console/consoletest_setup
+    - '{{bootloader_zkvm}}'
+    - '{{sle_os_boot}}'
+    - '{{alp_boot}}'
     - '{{repo_setup}}'
     - fips/fips_setup
-    - '{{y2_vnc_pvm}}'
     - fips/openssl/openssl_fips_alglist
     - fips/openssl/openssl_fips_hash
     - fips/openssl/openssl_fips_cipher
@@ -22,13 +21,20 @@ schedule:
     - fips/openssh/openssh_fips
     # ssh disabled in env mode, see poo#125648
     - '{{ssh}}'
+    - '{{alp_shutdown}}'
 conditional_schedule:
-    boot:
+    bootloader_zkvm:
         ARCH:
             s390x:
-                - installation/bootloader_start
-            ppc64le:
-                - installation/bootloader_start
+                - installation/bootloader_zkvm
+    sle_os_boot:
+        DISTRI:
+            sle:
+                - boot/boot_to_desktop
+                - console/consoletest_setup
+            opensuse:
+                - boot/boot_to_desktop
+                - console/consoletest_setup
     repo_setup:
         BETA:
             1:
@@ -36,10 +42,16 @@ conditional_schedule:
         FLAVOR:
             Online-QR:
                 - security/test_repo_setup
-    y2_vnc_pvm:
-        BACKEND:
-            pvm_hmc:
-                - console/yast2_vnc
+    alp_boot:
+        ENCRYPTED_IMAGE:
+            0:
+                - microos/disk_boot
+                - transactional/host_config
+                - security/selinux/selinux_setup
+            1:
+                - jeos/firstrun
+                - transactional/host_config
+                - security/selinux/selinux_setup
     ssh:
         TEST_SUITE_NAME:
             fips_ker_mode_tests_crypt_core:
@@ -48,3 +60,8 @@ conditional_schedule:
             fips_ker_mode_tests_crypt_core_intel_ipmi:
                 - console/sshd
                 - console/ssh_cleanup
+    alp_shutdown:
+        DISTRI:
+            alp:
+                - console/journal_check
+                - shutdown/shutdown

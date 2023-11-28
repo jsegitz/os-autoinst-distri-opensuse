@@ -12,7 +12,6 @@ use warnings;
 use testapi;
 use utils 'script_retry';
 use version_utils qw(is_sle);
-use set_config_as_glue;
 use virt_autotest::common;
 use virt_autotest::utils qw(is_kvm_host guest_is_sle wait_guest_online download_script_and_execute remove_vm save_original_guest_xmls restore_downloaded_guests restore_original_guests upload_virt_logs);
 
@@ -196,7 +195,7 @@ sub post_fail_hook {
     foreach my $guest (keys %virt_autotest::common::guests) {
         my $log_file = $log_dir . "/$guest" . "_irqbalance_debug";
         my $debug_script = "xen_irqbalance_guest_logging.sh";
-        download_script_and_execute($debug_script, machine => $guest, output_file => $log_file);
+        download_script_and_execute($debug_script, machine => $guest, output_file => $log_file, proceed_on_failure => 1);
     }
     upload_virt_logs($log_dir, "irqbalance_debug");
     $self->SUPER::post_fail_hook;

@@ -1,6 +1,6 @@
 # SUSE's openQA tests
 #
-# Copyright 2017-2021 SUSE LLC
+# Copyright 2017-2023 SUSE LLC
 # SPDX-License-Identifier: FSFAP
 
 # Package: docker-compose
@@ -14,7 +14,7 @@
 #      * Single commands can be executed inside of running container
 #      * Exposed ports are accessible from outside of a container
 #      * Logs can be retrieved
-# Maintainer: qac team <qa-c@suse.de>
+# Maintainer: QE-C team <qa-c@suse.de>
 
 
 use Mojo::Base 'containers::basetest';
@@ -43,23 +43,6 @@ sub run {
         $ret = zypper_call "in docker-compose", exitcode => [0, 4];
     } else {
         $ret = zypper_call "in docker-compose-switch";
-    }
-
-    if ($ret == 4) {
-        # https://bugzilla.suse.com/show_bug.cgi?id=1186691#c29
-        # Possible outcomes:
-        #  nothing provides python-dockerpty >= 0.3.2 needed by docker-compose-1.2.0-5.1.noarch (12-SP5 s390x)
-        #  nothing provides python-docker-py >= 1.0.0 needed by docker-compose-1.2.0-5.1.noarch (12-SP4 s390x)
-        record_soft_failure "bsc#1186691 - docker-compose probably missing dependency";
-        return 0;
-    }
-
-    if (script_output('docker-compose --version', proceed_on_failure => 1) =~ /distribution was not found/) {
-        # Installation is ok, but when issuing docker-compose commands it throws:
-        # pkg_resources.DistributionNotFound: The 'PyYAML<4,>=3.10' distribution was not found and is required by docker-compose
-        # This happens only in 12-SP3 and 12-SP4 x86_64
-        record_soft_failure "bsc#1186691 - docker-compose probably missing dependency";
-        return 0;
     }
 
     # Prepare docker-compose.yml and haproxy.cfg

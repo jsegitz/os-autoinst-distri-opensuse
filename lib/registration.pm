@@ -138,6 +138,8 @@ sub accept_addons_license {
     push @addons_with_license, @SLE15_ADDONS_WITH_LICENSE_NOINSTALL if (is_sle('15+') and get_var('IN_PATCH_SLE'));
     # HA does not show EULA when doing migration to 12-SP5
     @addons_with_license = grep { $_ ne 'ha' } @addons_with_license if (is_sle('12-sp5+') && get_var('UPGRADE') && !get_var('IN_PATCH_SLE'));
+    # HA does not show EULA when doing migration from 15-SP5 to 15-SP6
+    @addons_with_license = grep { $_ ne 'ha' } @addons_with_license if (is_sle('15-sp5+') && get_var('UPGRADE'));
 
     for my $addon (@scc_addons) {
         # most modules don't have license, skip them
@@ -589,6 +591,7 @@ sub process_scc_register_addons {
         }
     }
     else {
+        wait_still_screen(2, 4);
         send_key $cmd{next};
         if (check_var('HDDVERSION', '12')) {
             assert_screen 'yast-scc-emptypkg';
@@ -795,6 +798,8 @@ sub skip_registration {
     }
     elsif (match_has_tag('scc-skip-reg-warning-yes')) {
         send_key "alt-y";    # confirmed skip SCC registration
+        wait_still_screen;
+        send_key $cmd{next};
     }
 }
 
@@ -822,9 +827,9 @@ sub get_addon_fullname {
         rt => 'SUSE-Linux-Enterprise-RT',
         sapapp => 'sle-module-sap-applications',
         script => 'sle-module-web-scripting',
+        wsm => 'sle-module-web-scripting',
         serverapp => 'sle-module-server-applications',
         tcm => is_sle('15+') ? 'sle-module-development-tools' : 'sle-module-toolchain',
-        wsm => 'sle-module-web-scripting',
         python2 => 'sle-module-python2',
         python3 => 'sle-module-python3',
         phub => 'PackageHub',

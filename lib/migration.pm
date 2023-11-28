@@ -23,7 +23,7 @@ our @EXPORT = qw(
   register_system_in_textmode
   deregister_dropped_modules
   disable_installation_repos
-  disable_kernel_multiversion
+  modify_kernel_multiversion
   record_disk_info
   check_rollback_system
   reset_consoles_tty
@@ -149,7 +149,7 @@ sub remove_dropped_modules_packages {
 # https://documentation.suse.com/sles/15-SP2/html/SLES-all/cha-upgrade-online.html#sec-upgrade-online-zypper
 sub disable_installation_repos {
     if (is_s390x) {
-        zypper_call "mr -d `zypper lr -u | awk '/ftp:.*?openqa.suse.de|10.160.0.207|10.160.0.100/ {print \$1}'`";
+        zypper_call "mr -d `zypper lr -u | awk '/ftp:.*?openqa.suse.de|10.145.10.207|10.160.0.100/ {print \$1}'`";
     }
     else {
         zypper_call "mr -d -l";
@@ -158,9 +158,13 @@ sub disable_installation_repos {
 
 # Based on bsc#1097111, need to disable kernel multiversion before migration, and enable it after migration
 # https://documentation.suse.com/sles/15-SP3/html/SLES-all/cha-update-preparation.html#sec-update-preparation-multiversion
-sub disable_kernel_multiversion {
-    my $sed_para = check_var('VERSION', get_var('ORIGIN_SYSTEM_VERSION')) ? 's/^multiversion/#multiversion/g' : 's/^#multiversion/multiversion/g';
+# Acceplable arguements "disable" e.g. modify_kernel_multiversion("disable");
+# Any other arguement will enable multiversion kernel.
+sub modify_kernel_multiversion {
+    my ($modification) = @_;
+    my $sed_para = ($modification eq 'disable') ? 's/^multiversion/#multiversion/g' : 's/^#multiversion/multiversion/g';
     script_run("sed -i $sed_para /etc/zypp/zypp.conf");
+    record_info("Modification", "multiversion kernel " . $modification . "d");
 }
 
 # Record disk info to help debug diskspace exhausted

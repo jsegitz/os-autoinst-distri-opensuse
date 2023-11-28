@@ -12,13 +12,16 @@ use registration;
 use version_utils;
 use utils qw(zypper_call systemctl file_content_replace script_retry script_output_retry);
 use containers::utils qw(can_build_sle_base registry_url container_ip container_route);
-use transactional qw(trup_call check_reboot_changes);
+use transactional qw(trup_call check_reboot_changes process_reboot);
+use bootloader_setup 'add_grub_cmdline_settings';
+use serial_terminal 'select_serial_terminal';
+use power_action_utils 'power_action';
 use Mojo::JSON;
 
 our @EXPORT = qw(is_unreleased_sle install_podman_when_needed install_docker_when_needed install_containerd_when_needed
   test_container_runtime test_container_image scc_apply_docker_image_credentials scc_restore_docker_image_credentials
   install_buildah_when_needed test_rpm_db_backend activate_containers_module check_containers_connectivity
-  test_search_registry);
+  test_search_registry switch_cgroup_version);
 
 sub is_unreleased_sle {
     # If "SCC_URL" is set, it means we are in not-released SLE host and it points to proxy SCC url
@@ -85,7 +88,7 @@ sub install_docker_when_needed {
                 activate_containers_module;
 
                 # Temporarly enable LTSS product on LTSS systems where it is not present
-                if (get_var('SCC_REGCODE_LTSS') && script_run('test -f /etc/products.d/SLES-LTSS.prod') != 0) {
+                if (get_var('SCC_REGCODE_LTSS') && script_run('test -f /etc/products.d/SLES-LTSS.prod') != 0 && !main_common::is_updates_tests) {
                     add_suseconnect_product('SLES-LTSS', undef, undef, '-r ' . get_var('SCC_REGCODE_LTSS'), 150);
                     $ltss_needed = 1;
                 }
@@ -99,25 +102,14 @@ sub install_docker_when_needed {
                 systemctl 'try-restart firewalld';
             }
 
-            remove_suseconnect_product('SLES-LTSS') if $ltss_needed;
+            remove_suseconnect_product('SLES-LTSS') if $ltss_needed && !main_common::is_updates_tests;
         }
     }
 
     # docker daemon can be started
     systemctl('enable docker');
     systemctl('is-enabled docker');
-    # docker start, but taking bsc#1187479 into account. Please remove softfailure handling, once bsc#1187479 is solved.
-    if (systemctl('start docker', timeout => 180, ignore_failure => 1) != 0) {
-        # Check for docker start timeout, bsc#1187479
-        if (script_run('journalctl -e | grep "timeout waiting for containerd to start"') == 0) {
-            # Retry one more time
-            record_soft_failure("bsc#1187479 - docker start infrequently times out waiting for containerd");
-            sleep(120);    # give background services time to complete to prevent another failure
-            systemctl('start docker');
-        } else {
-            die "docker start failed";
-        }
-    }
+    systemctl('start docker', timeout => 180);
     systemctl('is-active docker');
     systemctl('status docker', timeout => 120);
     record_info('docker', script_output('docker info'));
@@ -306,6 +298,11 @@ sub check_containers_connectivity {
     record_info "connectivity", "Checking that containers can connect to the host, to each other and outside of the host";
     my $container_name = 'sut_container';
 
+    if (script_run('ping -6 -c 2 google.com') != 0 && is_sle_micro) {
+        record_info('Disable ipv6', 'https://sd.suse.com/servicedesk/customer/portal/1/SD-135489', result => 'softfail');
+        assert_script_run 'sysctl -w net.ipv6.conf.all.disable_ipv6=1';
+    }
+
     # Run container in the background (sleep for 30d because infinite is not supported by sleep in busybox)
     script_retry "$runtime pull " . registry_url('alpine'), retry => 3, delay => 120;
     assert_script_run "$runtime run -id --rm --name $container_name -p 1234:1234 " . registry_url('alpine') . " sleep 30d";
@@ -330,6 +327,26 @@ sub check_containers_connectivity {
 
     # Kill the container running on background
     assert_script_run "$runtime kill $container_name";
+}
+
+sub switch_cgroup_version {
+    my ($self, $version) = @_;
+
+    my $setting = ($version == 1) ? 0 : 1;
+
+    record_info "cgroup v$version", "Switching to cgroup v$version";
+    if (is_transactional) {
+        add_grub_cmdline_settings("systemd.unified_cgroup_hierarchy=$setting", update_grub => 0);
+        assert_script_run('transactional-update grub.cfg');
+        process_reboot(trigger => 1);
+    } else {
+        add_grub_cmdline_settings("systemd.unified_cgroup_hierarchy=$setting", update_grub => 1);
+        power_action('reboot', textmode => 1);
+        $self->wait_boot(bootloader_time => 360);
+    }
+    select_serial_terminal;
+
+    validate_script_output("cat /proc/cmdline", sub { m/systemd\.unified_cgroup_hierarchy=$setting/ });
 }
 
 1;

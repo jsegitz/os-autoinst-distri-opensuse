@@ -19,6 +19,7 @@ use Exporter 'import';
 use Scalar::Util 'looks_like_number';
 use publiccloud::utils;
 use publiccloud::provider;
+use publiccloud::ssh_interactive 'select_host_console';
 use testapi;
 use List::MoreUtils qw(uniq);
 use utils 'file_content_replace';
@@ -27,6 +28,7 @@ use hacluster;
 use qesapdeployment;
 use YAML::PP;
 use publiccloud::instance;
+use sles4sap;
 
 our @EXPORT = qw(
   run_cmd
@@ -45,11 +47,20 @@ our @EXPORT = qw(
   wait_for_pacemaker
   cloud_file_content_replace
   change_sbd_service_timeout
-  setup_sbd_delay
+  setup_sbd_delay_publiccloud
   sbd_delay_formula
   create_instance_data
   deployment_name
   delete_network_peering
+  create_playbook_section_list
+  create_hana_vars_section
+  azure_fencing_agents_playbook_args
+  display_full_status
+  list_cluster_nodes
+  sles4sap_cleanup
+  is_hana_database_online
+  get_hana_database_status
+  is_primary_node_online
 );
 
 =head2 run_cmd
@@ -106,6 +117,76 @@ sub get_promoted_hostname {
     }
 
     return join("", @master);
+}
+
+=head2 sles4sap_cleanup
+
+    Clean up Network peering and qesap deployment
+
+=cut
+
+sub sles4sap_cleanup {
+    my ($self, %args) = @_;
+
+    # If there's an open ssh connection to the VMs, return to host console first
+    select_host_console(force => 1);
+    record_info(
+        'Cleanup',
+        join(' ',
+            'cleanup_called:',
+            $args{cleanup_called} // 'undefined',
+            'network_peering_present:',
+            $args{network_peering_present} // 'undefined',
+            'ansible_present:',
+            $args{ansible_present} // 'undefined')
+    );
+
+    qesap_upload_logs();
+    if ($args{network_peering_present}) {
+        delete_network_peering();
+    }
+
+    # Do not run destroy if already executed
+    return 0 if ($args{cleanup_called});
+    my @cmd_list;
+
+    # Only run the Ansible deregister if Ansible has been executed
+    push(@cmd_list, 'ansible') if ($args{ansible_present});
+
+    # Terraform destroy can be executed in any case
+    push(@cmd_list, 'terraform');
+    for my $command (@cmd_list) {
+        record_info('Cleanup', "Executing $command cleanup");
+
+        # 3 attempts for both terraform and ansible cleanup
+        for (1 .. 3) {
+            my @cleanup_cmd_rc = qesap_execute(
+                verbose => '--verbose',
+                cmd => $command,
+                cmd_options => '-d',
+                timeout => 1200
+            );
+            if ($cleanup_cmd_rc[0] == 0) {
+                diag(ucfirst($command) . " cleanup attempt # $_ PASSED.");
+                record_info("Clean $command",
+                    ucfirst($command) . ' cleanup PASSED.');
+                last;
+            }
+            else {
+                diag(ucfirst($command) . " cleanup attempt # $_ FAILED.");
+                sleep 10;
+            }
+            record_info(
+                'Cleanup FAILED',
+                "Cleanup $command FAILED",
+                result => 'fail'
+            ) if $_ == 3 && $cleanup_cmd_rc[0];
+            return 0 if $_ == 3 && $cleanup_cmd_rc[0];
+        }
+    }
+    record_info('Cleanup finished');
+    return 1;
+
 }
 
 =head2 get_hana_topology
@@ -272,8 +353,8 @@ sub check_takeover {
     my ($self) = @_;
     my $hostname = $self->{my_instance}->{instance_id};
     my $retry_count = 0;
-    my $fenced_hana_status = $self->is_hana_online();
-    die("Fenced database '$hostname' is not offline") if ($fenced_hana_status == 1);
+    die("Database on the fenced node '$hostname' is not offline") if ($self->is_hana_database_online);
+    die("System replication '$hostname' is not offline") if ($self->is_primary_node_online);
 
   TAKEOVER_LOOP: while (1) {
         my $topology = $self->get_hana_topology();
@@ -304,7 +385,8 @@ sub check_takeover {
 sub enable_replication {
     my ($self) = @_;
     my $hostname = $self->{my_instance}->{instance_id};
-    die("Fenced database '$hostname' is not offline") if ($self->is_hana_online());
+    die("Database on the fenced node '$hostname' is not offline") if ($self->is_hana_database_online);
+    die("System replication '$hostname' is not offline") if ($self->is_primary_node_online);
 
     my $topology_out = $self->get_hana_topology(hostname => $hostname);
     my %topology = %$topology_out;
@@ -391,8 +473,8 @@ sub wait_for_sync {
         $output_pass-- if $output_pass == 1 && $ret !~ /SOK/ && $ret !~ /PRIM/ && $ret =~ /SFAIL/;
         $output_fail++ if $ret =~ /SFAIL/;
         $output_fail-- if $output_fail >= 1 && $ret !~ /SFAIL/;
-        next if $output_pass < 3;
-        last if $output_pass == 3;
+        next if $output_pass < 5;
+        last if $output_pass == 5;
         if (time - $start_time > $timeout) {
             record_info("Cluster status", $self->run_cmd(cmd => $crm_mon_cmd));
             record_info("Sync FAIL", "Host replication status: " . $self->run_cmd(cmd => 'SAPHanaSR-showAttr'));
@@ -461,8 +543,8 @@ sub change_sbd_service_timeout() {
     record_info("Systemd SBD", "Systemd unit timeout for 'sbd.service' set to '$service_timeout'");
 }
 
-=head2 setup_sbd_delay
-     $self->setup_sbd_delay();
+=head2 setup_sbd_delay_publiccloud
+     $self->setup_sbd_delay_publiccloud();
 
      Set (activate or deactivate) SBD_DELAY_START setting in /etc/sysconfig/sbd.
      Delay is used in case of cluster VM joining cluster too quickly after fencing operation.
@@ -478,7 +560,7 @@ sub change_sbd_service_timeout() {
 
 =cut
 
-sub setup_sbd_delay() {
+sub setup_sbd_delay_publiccloud() {
     my ($self) = @_;
     my $delay = get_var('HA_SBD_START_DELAY') // '';
 
@@ -606,6 +688,243 @@ sub delete_network_peering {
     elsif (is_ec2) {
         qesap_aws_delete_transit_gateway_vpc_attachment(name => deployment_name() . '*');
     }
+}
+
+=head2 create_ansible_playbook_list
+
+    Detects HANA/HA scenario from openQA variables and returns a list of ansible playbooks to include
+    in the "ansible: create:" section of config.yaml file.
+
+=cut
+
+sub create_playbook_section_list {
+    my ($ha_enabled) = @_;
+    my @playbook_list;
+
+    unless (get_var('QESAP_SCC_NO_REGISTER')) {
+        # Add registration module as first element - "QESAP_SCC_NO_REGISTER" skips scc registration via ansible
+        push @playbook_list, 'registration.yaml -e reg_code=' . get_required_var('SCC_REGCODE_SLES4SAP') . " -e email_address=''";
+        # Add "fully patch system" module after registration module and before test start/configuration moudles.
+        # Temporary moved inside ha_enabled condition to avoid test without Ansible to fails.
+        # To be properly addressed in the caller and fully-patch-system can be placed back out of the if.
+        push @playbook_list, 'fully-patch-system.yaml';
+    }
+
+    # Prepares Azure native fencing related arguments for 'sap-hana-cluster.yaml' playbook
+    my $hana_cluster_playbook = 'sap-hana-cluster.yaml';
+    my $azure_native_fencing_args;
+    if (get_var('FENCING_MECHANISM') eq 'native') {
+        $azure_native_fencing_args = azure_fencing_agents_playbook_args(
+            spn_application_id => get_var('_SECRET_AZURE_SPN_APPLICATION_ID'),
+            spn_application_password => get_var('_SECRET_AZURE_SPN_APP_PASSWORD')
+        );
+        $hana_cluster_playbook = join(' ', $hana_cluster_playbook, $azure_native_fencing_args);
+    }
+
+    # SLES4SAP/HA related playbooks
+    if ($ha_enabled) {
+        push @playbook_list, 'pre-cluster.yaml', 'sap-hana-preconfigure.yaml -e use_sapconf=' . get_required_var('USE_SAPCONF');
+        push @playbook_list, 'cluster_sbd_prep.yaml' if (check_var('FENCING_MECHANISM', 'sbd'));
+        push @playbook_list, qw(
+          sap-hana-storage.yaml
+          sap-hana-download-media.yaml
+          sap-hana-install.yaml
+          sap-hana-system-replication.yaml
+          sap-hana-system-replication-hooks.yaml
+        );
+        push @playbook_list, $hana_cluster_playbook;
+    }
+    return (\@playbook_list);
+}
+
+=head3 azure_fencing_agents_playbook_args
+
+    azure_fencing_agents_playbook_args(
+        spn_application_id=>$spn_application_id,
+        spn_application_password=>$spn_application_password
+    );
+
+    Collects data and creates string of arguments that can be supplied to playbook.
+    spn_application_id - application ID that allows API access for stonith device
+    spn_application_password - password provided for application ID above
+
+=cut
+
+sub azure_fencing_agents_playbook_args {
+    my (%args) = @_;
+    my $spn_application_id = $args{spn_application_id};
+    my $spn_application_password = $args{spn_application_password};
+    my $fence_agent_openqa_var = get_var('AZURE_FENCE_AGENT_CONFIGURATION') // 'msi';
+    croak "AZURE_FENCE_AGENT_CONFIGURATION contains dubious value: '$fence_agent_openqa_var'" unless
+      !$fence_agent_openqa_var or $fence_agent_openqa_var =~ /msi|spn/;
+    my $fence_agent_configuration = $fence_agent_openqa_var eq 'spn' ? $fence_agent_openqa_var : 'msi';
+
+    foreach ('spn_application_id', 'spn_application_password') {
+        next unless ($fence_agent_configuration eq 'spn');
+        croak "Missing '$_' argument" unless defined($args{$_});
+    }
+
+    my $playbook_opts = "-e azure_identity_management=$fence_agent_configuration";
+    $playbook_opts = join(' ', $playbook_opts,
+        "-e spn_application_id=$spn_application_id",
+        "-e spn_application_password=$spn_application_password") if $fence_agent_configuration eq 'spn';
+
+    return ($playbook_opts);
+}
+
+=head2 create_hana_vars_section
+
+    Detects HANA/HA scenario from openQA variables and creates "terraform: variables:" section in config.yaml file.
+
+=cut
+
+sub create_hana_vars_section {
+    my ($ha_enabled) = @_;
+    # Cluster related setup
+    my %hana_vars;
+    if ($ha_enabled == 1) {
+        $hana_vars{sap_hana_install_software_directory} = get_required_var('HANA_MEDIA');
+        $hana_vars{sap_hana_install_master_password} = get_required_var('_HANA_MASTER_PW');
+        $hana_vars{sap_hana_install_sid} = get_required_var('INSTANCE_SID');
+        $hana_vars{sap_hana_install_instance_number} = get_required_var('INSTANCE_ID');
+        $hana_vars{sap_domain} = get_var('SAP_DOMAIN', 'qesap.example.com');
+        $hana_vars{primary_site} = get_var('HANA_PRIMARY_SITE', 'site_a');
+        $hana_vars{secondary_site} = get_var('HANA_SECONDARY_SITE', 'site_b');
+        set_var('SAP_SIDADM', lc(get_var('INSTANCE_SID') . 'adm'));
+    }
+    return (\%hana_vars);
+}
+
+=head2 display_full_status
+
+    $self->display_full_status()
+
+    Displays most useful debugging info about cluster status, database status within a 'record_info' test entry.
+
+=cut
+
+sub display_full_status {
+    my ($self) = @_;
+    my $vm_name = $self->{my_instance}{instance_id};
+    my $crm_status = join("\n", "\n### CRM STATUS ###", $self->run_cmd(cmd => 'crm status', proceed_on_failure => 1));
+    my $saphanasr_showattr = join("\n", "\n### HANA REPLICATION INFO ###", $self->run_cmd(cmd => 'SAPHanaSR-showAttr', proceed_on_failure => 1));
+
+    my $final_message = join("\n", $crm_status, $saphanasr_showattr);
+    record_info("STATUS $vm_name", $final_message);
+}
+
+=head2 list_cluster_nodes
+
+    $self->list_cluster_nodes()
+
+    Returns list of hostnames that are part of a cluster using cmr shell command from one of the cluster nodes.
+
+=cut
+
+sub list_cluster_nodes {
+    my ($self) = @_;
+    my $instances = $self->{instances};
+    my @cluster_nodes;
+
+    foreach my $instance (@$instances) {
+        $self->{my_instance} = $instance;
+        # check if node is part of the cluster
+        next unless ($self->run_cmd(cmd => 'crm status', rc_only => 1, quiet => 1) == 0);
+        @cluster_nodes = split(/[\n\s]/, $self->run_cmd(cmd => 'crm node server'));    # list of cluster node members
+        return \@cluster_nodes;
+    }
+    die 'None of the hosts are currently part of existing cluster' unless @cluster_nodes;
+}
+
+=head2 get_hana_database_status
+
+    Run a query to the hana database, parses "hdbsql" command output and check if the connection still is alive.
+    Returns 1 if the response from hana database is online, 0 otherwise
+
+=cut
+
+sub get_hana_database_status {
+    my ($self, $password_db, $instance_id) = @_;
+    my $hdb_cmd = "hdbsql -u SYSTEM -p $password_db -i $instance_id 'SELECT * FROM SYS.M_DATABASES;'";
+    my $output_cmd = $self->run_cmd(cmd => $hdb_cmd, runas => get_required_var("SAP_SIDADM"), proceed_on_failure => 1);
+
+    if ($output_cmd =~ /Connection failed/) {
+        record_info('HANA DB OFFLINE', "Hana database in primary node is offline. Here the output \n$output_cmd");
+        return 0;
+    }
+    return 1;
+}
+
+=head2 is_hana_database_online
+
+    Setup a timeout and check the hana database status is offline and there is not connection.
+    if the connection still is online run a wait and try again to get the status.
+    Returns 1 if the output of the hana database is online, 0 means that hana database is offline
+
+=over 2
+
+=item B<TIMEOUT> - default 900
+=item B<TOTAL_CONSECUTIVE_PASSES> - default 5
+
+=back
+=cut
+
+sub is_hana_database_online {
+    my ($self, %args) = @_;
+    my $timeout = bmwqemu::scale_timeout($args{timeout} // 900);
+    my $total_consecutive_passes = ($args{total_consecutive_passes} // 5);
+    my $instance_id = get_required_var('INSTANCE_ID');
+
+    my $db_status = -1;
+    my $consecutive_passes = 0;
+    my $password_db = get_required_var('_HANA_MASTER_PW');
+    my $start_time = time;
+    my $hdb_cmd = "hdbsql -u SYSTEM -p $password_db -i $instance_id 'SELECT * FROM SYS.M_DATABASES;'";
+
+    while ($consecutive_passes < $total_consecutive_passes) {
+        $db_status = $self->get_hana_database_status($password_db, $instance_id);
+        if (time - $start_time > $timeout) {
+            record_info("Hana database after timeout", $self->run_cmd(cmd => $hdb_cmd));
+            die("Hana database is still online");
+        }
+        if ($db_status == 0) {
+            last;
+        }
+        sleep 30;
+        ++$consecutive_passes;
+    }
+    return $db_status;
+}
+
+=head2 is_primary_node_online
+
+    Check if primary node in a hana cluster is offline.
+    Returns if primary node status is offline with 0 and 1 online
+
+=cut
+
+sub is_primary_node_online {
+    my ($self, %args) = @_;
+    my $sapadmin = lc(get_required_var('INSTANCE_SID')) . 'adm';
+
+    # Wait by default for 5 minutes
+    my $time_to_wait = 300;
+    my $timeout = bmwqemu::scale_timeout($args{timeout} // 300);
+    my $cmd = "python exe/python_support/systemReplicationStatus.py";
+    my $output = "";
+
+    # Loop until is not primary the vm01 or timeout is reached
+    while ($time_to_wait > 0) {
+        $output = $self->run_cmd(cmd => $cmd, runas => $sapadmin, timeout => $timeout, proceed_on_failure => 1);
+        if ($output !~ /mode:[\r\n\s]+PRIMARY/) {
+            record_info('SYSTEM REPLICATION STATUS', "System replication status in pimary node.\n$@");
+            return 0;
+        }
+        $time_to_wait -= 10;
+        sleep 10;
+    }
+    record_info('SYSTEM REPLICATION STATUS', "System replication status in primary node.\n$output");
+    return 1;
 }
 
 1;

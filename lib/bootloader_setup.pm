@@ -120,17 +120,17 @@ sub add_custom_grub_entries {
     if (check_var('VERSION', '12-SP4') && is_aarch64) {
         $distro = 'SLE-HPC' . ' \\?' . get_required_var('VERSION');
     }
-    elsif (check_var('SLE_PRODUCT', 'slert')) {
-        $distro = "SLE_RT" . ' \\?' . get_required_var('VERSION');
-    }
-    elsif (is_sle()) {
-        $distro = "SLES" . ' \\?' . get_required_var('VERSION');
-    }
     elsif (is_alp()) {
         $distro = "ALP";
     }
     elsif (is_sle_micro()) {
         $distro = "SLE Micro";
+    }
+    elsif (check_var('SLE_PRODUCT', 'slert')) {
+        $distro = "SLE_RT" . ' \\?' . get_required_var('VERSION');
+    }
+    elsif (is_sle()) {
+        $distro = "SLES" . ' \\?' . get_required_var('VERSION');
     }
 
     bmwqemu::diag("Trying to trigger purging old kernels before changing grub menu");
@@ -988,7 +988,7 @@ sub tianocore_disable_secureboot {
     send_key_until_needlematch 'tianocore-devicemanager', 'esc';
     send_key_until_needlematch 'tianocore-mainmenu-reset', 'down';
     send_key 'ret';
-    send_key 'ret' if check_screen($neelle_sb_config_state, $timeout);
+    send_key 'ret' if (!is_aarch64() && check_screen($neelle_sb_config_state, $timeout));
     $basetest->wait_grub;
 }
 
