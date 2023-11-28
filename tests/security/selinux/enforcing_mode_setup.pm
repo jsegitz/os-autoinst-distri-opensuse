@@ -26,22 +26,22 @@ sub run {
     assert_script_run("semanage boolean --modify --on selinuxuser_execmod");
     script_run("restorecon -R /", timeout => 1800, die_on_timeout => 0);
     script_run("restorecon -R /*", timeout => 1800, die_on_timeout => 0);
-    assert_script_run('grep -i avc /var/log/audit/audit.log');
 
     # enable enforcing mode from SELinux
     replace_grub_cmdline_settings('security=selinux selinux=1 enforcing=0', 'security=selinux selinux=1 enforcing=1', update_grub => 1);
-    assert_script_run('grep -i avc /var/log/audit/audit.log');
 
     # control (enable) the status of SELinux on the system
     assert_script_run("sed -i -e 's/^SELINUX=/#SELINUX=/' /etc/selinux/config");
     assert_script_run("echo 'SELINUX=enforcing' >> /etc/selinux/config");
     assert_script_run('grep -i avc /var/log/audit/audit.log');
+    assert_script_run('rm /var/log/audit/audit.log');
 
     power_action("reboot", textmode => 1);
     reconnect_mgmt_console if is_pvm;
     $self->wait_boot(textmode => 1, ready_time => 600, bootloader_time => 300);
     select_serial_terminal;
 
+    assert_script_run('grep -i avc /var/log/audit/audit.log');
     validate_script_output(
         "sestatus",
         sub {

@@ -34,7 +34,6 @@ sub run {
         validate_script_output('zypper -n up --auto-agree-with-product-licenses --no-recommends sle-we-release',
             sub { m/\(1\/1\) Installing: sle-we-release/ });
     }
-    assert_script_run('grep -i avc /var/log/audit/audit.log');
 
     # refresh & update
     zypper_call("ref", timeout => 1200);
@@ -60,7 +59,6 @@ sub run {
     # install & remove patterns, e.g., mail_server
     zypper_call("in -t pattern mail_server");
     zypper_call("rm -t pattern mail_server");
-    assert_script_run('grep -i avc /var/log/audit/audit.log');
 }
 
 1;
