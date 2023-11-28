@@ -35,6 +35,7 @@ sub run {
     # clean up in case: remove all local customizations
     assert_script_run("semanage fcontext -D");
 
+    assert_script_run('grep -i avc /var/log/audit/audit.log');
     # test option "-a -t": add local customizations
     assert_script_run("semanage fcontext -a -t $fcontext_type1 $test_dir");
     assert_script_run("semanage fcontext -a -t $fcontext_type2 ${test_dir}/${test_file}");
