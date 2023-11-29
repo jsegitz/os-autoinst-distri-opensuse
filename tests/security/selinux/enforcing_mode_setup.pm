@@ -24,6 +24,9 @@ sub run {
 
     assert_script_run('grep -i avc /var/log/audit/audit.log');
     power_action("reboot", textmode => 1);
+    reconnect_mgmt_console if is_pvm;
+    $self->wait_boot(textmode => 1, ready_time => 600, bootloader_time => 300);
+    select_serial_terminal;
     assert_script_run('grep -i avc /var/log/audit/audit.log');
 
     # label system
