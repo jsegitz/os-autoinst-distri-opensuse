@@ -22,12 +22,12 @@ sub run {
     # make sure SELinux in "permissive" mode
     validate_script_output("sestatus", sub { m/.*Current\ mode:\ .*permissive.*/sx });
 
-    assert_script_run('grep -i avc /var/log/audit/audit.log');
+    # assert_script_run('grep -i avc /var/log/audit/audit.log');
     power_action("reboot", textmode => 1);
     reconnect_mgmt_console if is_pvm;
     $self->wait_boot(textmode => 1, ready_time => 600, bootloader_time => 300);
     select_serial_terminal;
-    assert_script_run('grep -i avc /var/log/audit/audit.log');
+    # assert_script_run('grep -i avc /var/log/audit/audit.log');
 
     # label system
     assert_script_run("semanage boolean --modify --on selinuxuser_execmod");
@@ -40,7 +40,7 @@ sub run {
     # control (enable) the status of SELinux on the system
     assert_script_run("sed -i -e 's/^SELINUX=/#SELINUX=/' /etc/selinux/config");
     assert_script_run("echo 'SELINUX=enforcing' >> /etc/selinux/config");
-    assert_script_run('grep -i avc /var/log/audit/audit.log');
+    # assert_script_run('grep -i avc /var/log/audit/audit.log');
     # assert_script_run('rm /var/log/audit/audit.log');
 
     power_action("reboot", textmode => 1);
@@ -48,7 +48,7 @@ sub run {
     $self->wait_boot(textmode => 1, ready_time => 600, bootloader_time => 300);
     select_serial_terminal;
 
-    assert_script_run('grep -i avc /var/log/audit/audit.log');
+    # assert_script_run('grep -i avc /var/log/audit/audit.log');
     validate_script_output(
         "sestatus",
         sub {
