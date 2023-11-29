@@ -22,6 +22,10 @@ sub run {
     # make sure SELinux in "permissive" mode
     validate_script_output("sestatus", sub { m/.*Current\ mode:\ .*permissive.*/sx });
 
+    assert_script_run('grep -i avc /var/log/audit/audit.log');
+    power_action("reboot", textmode => 1);
+    assert_script_run('grep -i avc /var/log/audit/audit.log');
+
     # label system
     assert_script_run("semanage boolean --modify --on selinuxuser_execmod");
     script_run("restorecon -R /", timeout => 1800, die_on_timeout => 0);
