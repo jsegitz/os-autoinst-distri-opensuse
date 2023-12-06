@@ -58,6 +58,7 @@ sub run {
     my @journal_output = split(/\n/, script_output("journalctl --no-pager --quiet -p ${\get_var('JOURNAL_LOG_LEVEL', 'err')} -o short-precise"));
     my @matched_bugs;
 
+    script_run("grep -i avc /var/log/audit/audit.log");
     # Find lines which matches to the pattern_bug
     foreach my $bsc (keys %$bug_pattern) {
         my $buffer = "";
