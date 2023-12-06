@@ -59,6 +59,7 @@ sub run {
     my @matched_bugs;
 
     script_run("grep -i avc /var/log/audit/audit.log");
+    script_run("zypper info selinux-policy-targeted");
     # Find lines which matches to the pattern_bug
     foreach my $bsc (keys %$bug_pattern) {
         my $buffer = "";
