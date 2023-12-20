@@ -32,6 +32,10 @@ sub check_avc {
     # Read the Access Vector Cache to check for SELinux denials
     my $avc = $instance->ssh_script_output(cmd => 'sudo ausearch -ts boot -m avc --format raw | ( grep type=AVC || true )');
     record_info("AVC at boot", $avc);
+    assert_script_run("systemctl restart rebootmgr.service");
+    my $avc = $instance->ssh_script_output(cmd => 'sudo ausearch -ts boot -m avc --format raw | ( grep type=AVC || true )');
+    record_info("AVC at boot2", $avc);
+
     return if ($avc =~ "no matches");
 
     ## Gain better formatted logs and upload them for further investigation
