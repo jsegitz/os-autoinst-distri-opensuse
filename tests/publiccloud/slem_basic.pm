@@ -39,7 +39,8 @@ sub check_avc {
     $instance->ssh_script_output(cmd => 'sudo /usr/sbin/rebootmgrd &', timeout => 60);
     my $avc = $instance->ssh_script_output(cmd => 'sudo ausearch -ts boot -m avc --format raw | ( grep type=AVC || true )');
     record_info("AVC at boot3", $avc);
-    $instance->ssh_script_output(cmd => 'sudo zypper install strace', timeout => 60);
+    $instance->run_ssh_command(cmd => 'sudo transactional-update -n pkg install strace', timeout => 600);
+    $instance->softreboot();
 
     return if ($avc =~ "no matches");
 
