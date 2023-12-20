@@ -32,9 +32,14 @@ sub check_avc {
     # Read the Access Vector Cache to check for SELinux denials
     my $avc = $instance->ssh_script_output(cmd => 'sudo ausearch -ts boot -m avc --format raw | ( grep type=AVC || true )');
     record_info("AVC at boot", $avc);
-    $instance->ssh_script_output(cmd => 'sudo systemctl restart rebootmgr.service');
+    $instance->ssh_script_output(cmd => 'sudo systemctl restart rebootmgr.service', timeout => 60);
     my $avc = $instance->ssh_script_output(cmd => 'sudo ausearch -ts boot -m avc --format raw | ( grep type=AVC || true )');
     record_info("AVC at boot2", $avc);
+    $instance->ssh_script_output(cmd => 'sudo systemctl stop rebootmgr.service', timeout => 60);
+    $instance->ssh_script_output(cmd => 'sudo /usr/sbin/rebootmgrd &', timeout => 60);
+    my $avc = $instance->ssh_script_output(cmd => 'sudo ausearch -ts boot -m avc --format raw | ( grep type=AVC || true )');
+    record_info("AVC at boot3", $avc);
+    $instance->ssh_script_output(cmd => 'sudo zypper install strace', timeout => 60);
 
     return if ($avc =~ "no matches");
 
