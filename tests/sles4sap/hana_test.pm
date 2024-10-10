@@ -73,6 +73,9 @@ sub run {
     $self->test_python3 unless ($ver_info =~ /version:\s+2\.00\.0[0-5]/);
 
     # Check HDB with a database query
+    record_info 'HANA sid: ', $sid;
+    record_info 'HANA instance_id: ', $instance_id;
+    record_info 'HANA pw: ', $sles4sap::instance_password;
     my $hdbsql = "hdbsql -j -d $sid -u SYSTEM -i $instance_id -p $sles4sap::instance_password";
     my $output;
     unless (get_var('SKIP_HANADB_QUERY')) {
