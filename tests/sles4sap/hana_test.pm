@@ -76,7 +76,8 @@ sub run {
     record_info 'HANA sid: ', $sid;
     record_info 'HANA instance_id: ', $instance_id;
     record_info 'HANA pw: ', $sles4sap::instance_password;
-    my $hdbsql = "hdbsql -j -d $sid -u SYSTEM -i $instance_id -p $sles4sap::instance_password";
+    
+    my $hdbsql = "hdbsql -j -d $sid -u SYSTEM -i $instance_id -p Linux_123";
     my $output;
     unless (get_var('SKIP_HANADB_QUERY')) {
         $output = script_output "$hdbsql 'SELECT * FROM DUMMY'";
