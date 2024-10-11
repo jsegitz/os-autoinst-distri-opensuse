@@ -54,7 +54,7 @@ sub run {
 
     assert_script_run("zypper ar -p 80 https://download.opensuse.org/repositories/security:/SELinux/15.4/security:SELinux.repo");
     assert_script_run("zypper in --allow-vendor-change -y selinux-policy-targeted restorecond selinux-policy-devel policycoreutils setools-console policycoreutils-devel policycoreutils-python-utils selinux-autorelabel restorecond");
-    assert_script_run("sed -i -E 's/(GRUB_CMDLINE_LINUX_DEFAULT=.*)"/\1 security=selinux selinux=1"/' /etc/default/grub");
+    assert_script_run("sed -i -E 's/(GRUB_CMDLINE_LINUX_DEFAULT=.*)\"/\1 security=selinux selinux=1\"/' /etc/default/grub");
     assert_script_run("update-bootloader --refresh");
     $self->reboot;
 
