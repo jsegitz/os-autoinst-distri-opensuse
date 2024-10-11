@@ -15,6 +15,7 @@ use power_action_utils 'power_action';
 use version_utils qw(is_sle is_leap is_tumbleweed is_sle_micro);
 use transactional qw(process_reboot trup_call);
 use Utils::Architectures;
+use base "reboot_and_wait_up";
 
 sub get_policy_date {
     if (is_sle('>=15') && is_sle('<15-sp4')) {
@@ -58,6 +59,9 @@ sub run {
     assert_script_run("sed -i -E 's/(GRUB_CMDLINE_LINUX_DEFAULT=.*)\"/\\1 security=selinux selinux=1\"/' /etc/default/grub");
     assert_script_run("update-bootloader --refresh");
     $self->reboot;
+    my $timeout = 180;
+
+    $self->reboot_and_wait_up($timeout);
 
     # on SLE Micro selinux is enabled and set to enforcing by default
     # if (is_sle_micro('>=6.0')) {
