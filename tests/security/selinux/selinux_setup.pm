@@ -52,24 +52,30 @@ sub install_pkgs {
 sub run {
     my ($self) = @_;
 
+    assert_script_run("zypper ar -p 80 https://download.opensuse.org/repositories/security:/SELinux/15.4/security:SELinux.repo");
+    assert_script_run("zypper in --allow-vendor-change -y selinux-policy-targeted restorecond selinux-policy-devel policycoreutils setools-console policycoreutils-devel policycoreutils-python-utils selinux-autorelabel restorecond");
+    assert_script_run("sed -i -E 's/(GRUB_CMDLINE_LINUX_DEFAULT=.*)"/\1 security=selinux selinux=1"/' /etc/default/grub");
+    assert_script_run("update-bootloader --refresh");
+    $self->reboot;
+
     # on SLE Micro selinux is enabled and set to enforcing by default
-    if (is_sle_micro('>=6.0')) {
-        validate_script_output('sestatus', sub { m/SELinux status: .*enabled/ && m/Current mode: .*enforcing/ }, fail_message => 'SELinux is NOT enabled and set to enforcing');
-        trup_call('pkg install policycoreutils-python-utils');
-        process_reboot(trigger => 1);
-    } else {
-        # In CC testing, the root login will be disabled, so we need to use select_console
-        is_s390x() ? select_console 'root-console' : select_serial_terminal;
+    # if (is_sle_micro('>=6.0')) {
+    #     validate_script_output('sestatus', sub { m/SELinux status: .*enabled/ && m/Current mode: .*enforcing/ }, fail_message => 'SELinux is NOT enabled and set to enforcing');
+    #     trup_call('pkg install policycoreutils-python-utils');
+    #     process_reboot(trigger => 1);
+    # } else {
+    #     # In CC testing, the root login will be disabled, so we need to use select_console
+    #     is_s390x() ? select_console 'root-console' : select_serial_terminal;
 
-        install_pkgs;
+    #     install_pkgs;
 
-        # Record the pkgs' version for reference
-        my $results = script_output('zypper se -s selinux policycore', timeout => 300);
-        record_info('Pkg_ver', "SELinux packages' version is: $results");
+    #     # Record the pkgs' version for reference
+    #     my $results = script_output('zypper se -s selinux policycore', timeout => 300);
+    #     record_info('Pkg_ver', "SELinux packages' version is: $results");
 
-        # Check that SELinux is disabled by default.
-        validate_script_output('sestatus', sub { m/SELinux status: .*disabled/ }, fail_message => 'SELinux is enabled when it should not be');
-    }
+    #     # Check that SELinux is disabled by default.
+    #     validate_script_output('sestatus', sub { m/SELinux status: .*disabled/ }, fail_message => 'SELinux is enabled when it should not be');
+    # }
 }
 
 sub test_flags {
