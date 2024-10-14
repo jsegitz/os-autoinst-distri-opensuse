@@ -67,6 +67,9 @@ sub run {
     check_screen('grub2', timeout => 290)
     send_key 'ret';
 
+    check_screen('grub2', timeout => 290)
+    send_key 'ret';
+
     select_serial_terminal;
 
     # label system
