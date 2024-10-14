@@ -60,7 +60,6 @@ sub run {
 
     select_serial_terminal;
     power_action("reboot", textmode => 1);
-    reconnect_mgmt_console if is_pvm;
     $self->wait_boot(textmode => 1, ready_time => 600, bootloader_time => 300);
     select_serial_terminal;
 
