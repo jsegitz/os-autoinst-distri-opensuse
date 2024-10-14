@@ -63,6 +63,10 @@ sub run {
     power_action("reboot", textmode => 1);
     reconnect_mgmt_console if is_pvm;
     $self->wait_boot(textmode => 1, ready_time => 600, bootloader_time => 300);
+
+    check_screen('grub2', timeout => 290)
+    send_key 'ret';
+
     select_serial_terminal;
 
     # label system
