@@ -64,10 +64,10 @@ sub run {
     reconnect_mgmt_console if is_pvm;
     $self->wait_boot(textmode => 1, ready_time => 900, bootloader_time => 600);
 
-    check_screen('grub2', timeout => 290);
+    check_screen('grub2', timeout => 690);
     send_key 'ret';
 
-    check_screen('grub2', timeout => 290);
+    check_screen('grub2', timeout => 690);
     send_key 'ret';
 
     select_serial_terminal;
