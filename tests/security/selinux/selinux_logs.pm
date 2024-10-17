@@ -17,7 +17,7 @@ sub run {
     select_serial_terminal;
 
     my $tarball = "logs.tar.xz";
-    assert_script_run("tar cJf $tarball -C /var/log/");
+    assert_script_run("tar cJf $tarball /var/log/");
     upload_logs($tarball, timeout => 60);
 
 }
