@@ -34,21 +34,17 @@ sub run {
         $args->{my_instance}->upload_log('/tmp/rpm-qa-before-patch-system.txt');
     }
 
-    $args->{my_instance}->ssh_script_retry("sudo zypper ar -p 80 https://download.suse.de/ibs/home:/jsegitz:/branches:/SUSE:/SLE-15-SP5:/Update:/Products:/Micro55:/Update/SUSE_SLE-15-SP5_Update_Products_Micro55_Update/home:jsegitz:branches:SUSE:SLE-15-SP5:Update:Products:Micro55:Update.repo", timeout => $ref_timeout, retry => 6, delay => 60);
     $args->{my_instance}->ssh_script_retry("sudo zypper -n --gpg-auto-import-keys ref", timeout => $ref_timeout, retry => 6, delay => 60);
-    $args->{my_instance}->ssh_script_retry("sudo transactional-update pkg install --allow-vendor-change -y selinux-policy-targeted", timeout => $ref_timeout, retry => 6, delay => 60);
-    
-    # $args->{my_instance}->ssh_script_retry("sudo zypper -n --gpg-auto-import-keys ref", timeout => $ref_timeout, retry => 6, delay => 60);
-    # record_info('zypper ref time', 'The command zypper -n ref took ' . (time() - $cmd_time) . ' seconds.');
-    # record_soft_failure('bsc#1195382 - Considerable decrease of zypper performance and increase of registration times') if ((time() - $cmd_time) > 240);
-    # if (is_sle_micro) {
-    #     ssh_update_transactional_system($args->{my_instance});
-    # } else {
-    #     ssh_fully_patch_system($remote);
-    # }
-    # record_info('UNAME', $args->{my_instance}->ssh_script_output(cmd => 'uname -a'));
-    # $args->{my_instance}->ssh_assert_script_run(cmd => 'rpm -qa > /tmp/rpm-qa.txt');
-    # $args->{my_instance}->upload_log('/tmp/rpm-qa.txt');
+    record_info('zypper ref time', 'The command zypper -n ref took ' . (time() - $cmd_time) . ' seconds.');
+    record_soft_failure('bsc#1195382 - Considerable decrease of zypper performance and increase of registration times') if ((time() - $cmd_time) > 240);
+    if (is_sle_micro) {
+        ssh_update_transactional_system($args->{my_instance});
+    } else {
+        ssh_fully_patch_system($remote);
+    }
+    record_info('UNAME', $args->{my_instance}->ssh_script_output(cmd => 'uname -a'));
+    $args->{my_instance}->ssh_assert_script_run(cmd => 'rpm -qa > /tmp/rpm-qa.txt');
+    $args->{my_instance}->upload_log('/tmp/rpm-qa.txt');
 
     if (is_cloudinit_supported) {
         $args->{my_instance}->cleanup_cloudinit();
@@ -58,7 +54,6 @@ sub run {
     } else {
         $args->{my_instance}->softreboot(timeout => get_var('PUBLIC_CLOUD_REBOOT_TIMEOUT', 600));
     }
-
 }
 
 sub test_flags {
