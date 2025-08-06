@@ -34,7 +34,7 @@ sub run {
         $args->{my_instance}->upload_log('/tmp/rpm-qa-before-patch-system.txt');
     }
 
-    $args->{my_instance}->ssh_script_retry("sudo transactional-update run bash -c \"zypper ar -p 80 https://download.opensuse.org/repositories/home:/jsegitz:/branches:/security:/SELinux_1246559/SUSE_SLE-15-SP5_Update_Products_Micro55_Update/home:jsegitz:branches:security:SELinux_1246559.repo; zypper -n --gpg-auto-import-keys ref; zypper install --allow-vendor-change -y --oldpackage selinux-policy-targeted selinux-policy setools-console\"");
+    $args->{my_instance}->ssh_script_retry("sudo transactional-update run bash -c \"zypper ar -p 80 https://download.opensuse.org/repositories/home:/jsegitz:/branches:/security:/SELinux_1246559/SUSE_SLE-15-SP5_Update_Products_Micro55_Update/home:jsegitz:branches:security:SELinux_1246559.repo; zypper -n --gpg-auto-import-keys ref; zypper install --allow-vendor-change -y --oldpackage selinux-policy-targeted selinux-policy setools-console\"", timeout => 600);
     # $args->{my_instance}->ssh_script_retry("sudo zypper ar -p 80 https://download.opensuse.org/repositories/home:/jsegitz:/branches:/security:/SELinux_1246559/SUSE_SLE-15-SP5_Update_Products_Micro55_Update/home:jsegitz:branches:security:SELinux_1246559.repo", timeout => $ref_timeout, retry => 6, delay => 60);
     # $args->{my_instance}->ssh_script_retry("sudo zypper -n --gpg-auto-import-keys ref", timeout => $ref_timeout, retry => 6, delay => 60);
     # $args->{my_instance}->ssh_script_retry("sudo transactional-update pkg install --allow-vendor-change -y selinux-policy-targeted", timeout => $ref_timeout, retry => 6, delay => 60);
