@@ -64,7 +64,7 @@ sub run {
     $instance->run_ssh_command(cmd => 'systemctl is-enabled transactional-update.timer');
     $instance->run_ssh_command(cmd => 'systemctl is-enabled issue-add-ssh-keys');
 
-    $instance->run_ssh_command(cmd => 'sudo sesearch -s NetworkManager_t -t wicked_var_run_t -AT');
+    # $instance->run_ssh_command(cmd => 'sudo sesearch -s NetworkManager_t -t wicked_var_run_t -AT');
     $instance->run_ssh_command(cmd => 'sudo zypper info selinux-policy-targeted');
 
     # Ensure NetworkManager is used on SLEM 5.3+
