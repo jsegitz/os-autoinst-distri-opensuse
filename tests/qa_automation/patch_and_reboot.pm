@@ -67,11 +67,15 @@ sub run {
         upload_logs('/tmp/rpm_packages_list_after_patch.txt');
     }
     assert_script_run("sudo grep -i avc /var/log/audit/audit.log");
+    assert_script_run("ls -lahZ /usr/libexec/ssh/sshd-session");
 
     # DESKTOP can be gnome, but patch is happening in shell, thus always force reboot in shell
     power_action('reboot', textmode => 1);
     reconnect_mgmt_console if is_pvm;
     $self->wait_boot(ready_time => 600, bootloader_time => get_var('BOOTLOADER_TIMEOUT', 300));
+
+    select_serial_terminal;
+    assert_script_run("sudo grep -i avc /var/log/audit/audit.log");
 }
 
 sub test_flags {
