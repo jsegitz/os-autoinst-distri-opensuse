@@ -66,6 +66,7 @@ sub run {
         assert_script_run("rpm -qa > /tmp/rpm_packages_list_after_patch.txt");
         upload_logs('/tmp/rpm_packages_list_after_patch.txt');
     }
+    assert_script_run("sudo grep -i avc /var/log/audit/audit.log");
 
     # DESKTOP can be gnome, but patch is happening in shell, thus always force reboot in shell
     power_action('reboot', textmode => 1);
