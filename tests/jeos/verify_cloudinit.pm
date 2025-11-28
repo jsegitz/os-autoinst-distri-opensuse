@@ -39,7 +39,6 @@ sub run {
     record_info('BOOT', script_output('cloud-init analyze boot', proceed_on_failure => 1));
     record_info('SCHEMA', script_output('cloud-init schema --system', proceed_on_failure => 1));
 
-    assert_script_run("false");
     # Registration
     unless (is_opensuse || get_var('NO_CLOUD')) {
         if (script_run('test -f /etc/zypp/credentials.d/SCCcredentials')) {
