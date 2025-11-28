@@ -101,6 +101,7 @@ sub run {
 
     select_console('user-console');
     assert_script_run('sudo sysctl -a');
+    assert_script_run("false");
     enter_cmd('sudo -u tester_ssh -i');
     assert_script_run('cat ~/.ssh/authorized_keys | grep rsa');
     assert_script_run('cat ~/.ssh/authorized_keys | grep ecdsa');
