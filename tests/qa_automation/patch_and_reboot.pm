@@ -69,6 +69,7 @@ sub run {
     assert_script_run("sudo grep -i avc /var/log/audit/audit.log");
     assert_script_run("ls -lahZ /usr/libexec/ssh/sshd-session");
     assert_script_run("rpm -qa");
+    assert_script_run("false");
 
     # DESKTOP can be gnome, but patch is happening in shell, thus always force reboot in shell
     power_action('reboot', textmode => 1);
